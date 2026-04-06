@@ -1,96 +1,9 @@
 # claude-harness
 
-> A state machine driven multi-agent development workflow for Claude Code
+> 基于 Claude Code 的多 Agent 协作开发工作流系统
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-v3.5%2B-blue)](https://claude.com/code)
-
-<!-- Language Toggle / 语言切换 -->
-<div id="lang-toggle" style="margin: 20px 0;">
-  <button onclick="showLang('en')" id="btn-en" style="padding:8px 16px;margin-right:8px;cursor:pointer;background:#0066cc;color:white;border:1px solid #0066cc;border-radius:4px;">English</button>
-  <button onclick="showLang('zh')" id="btn-zh" style="padding:8px 16px;cursor:pointer;background:white;color:#333;border:1px solid #ccc;border-radius:4px;">中文</button>
-</div>
-
----
-
-<!-- English Section -->
-<div id="section-en">
-
-## Features
-
-| Feature | Description |
-|---------|-------------|
-| **12 Specialized Agents** | PM, Architect, Designer, FullStack Engineer, Reviewer, QA, Security, DevOps, and more |
-| **14-State Pipeline** | Complete lifecycle: Idea → PRD → Architecture → Design → Implementation → QA → Security → Deploy |
-| **Autopilot Mode** | Fully automated workflow with automatic requirement injection |
-| **Hotfix Mode** | Skip design/implementation phases for emergency fixes |
-| **Feature Mode** | Skip architecture/design for incremental features |
-| **Context Budget** | Automatic context tracking and management |
-| **Slash Commands** | Native `/autopilot`, `/generate-prd`, `/implement-feature` and more |
-
-### Quick Start
-
-```bash
-# 1. Add the marketplace
-claude plugin marketplace add poz110/claude-harness
-
-# 2. Install the plugin
-claude plugin install claude-harness
-
-# 3. Initialize
-/claude-harness:init
-
-# 4. Start building!
-/autopilot Build a blog system with user authentication
-```
-
-### Workflow Pipeline
-
-```
-IDEA → PRD_DRAFT → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW → DESIGN_PHASE
-     → DESIGN_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE
-     → SECURITY_REVIEW → DEPLOY_PREP_SETUP → DEPLOY_PREP → DONE
-```
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `/claude-harness:init` | Install agents & skills to `~/.claude/` |
-| `/autopilot <requirement>` | Full automation with requirement |
-| `/autopilot greenfield <req>` | Full project from scratch |
-| `/autopilot feature <req>` | Add new feature |
-| `/autopilot hotfix <issue>` | Emergency fix |
-| `/generate-prd` | Generate Product Requirement Document |
-| `/generate-design` | Create design system and specs |
-| `/implement-feature` | Implement a feature |
-| `/implement-api` | Implement backend API |
-| `/arch-review` | Architecture review |
-| `/code-review-arch` | Code review + architecture compliance |
-| `/qa` | Run QA testing |
-| `/owasp-scan` | Security vulnerability scan |
-| `/setup-cicd` | Configure CI/CD pipeline |
-| `/monitor` | Launch monitoring dashboard |
-
-### Requirements
-
-| Requirement | Version |
-|-------------|---------|
-| Node.js | >= 18.0.0 |
-| Claude Code | Latest |
-
-### License
-
-MIT © Snow.Li
-
-### Contributing
-
-Contributions welcome! Please read `AGENTS.md` for contribution guidelines.
-
-</div>
-
-<!-- Chinese Section -->
-<div id="section-zh" style="display:none;">
 
 ## 特性
 
@@ -104,7 +17,7 @@ Contributions welcome! Please read `AGENTS.md` for contribution guidelines.
 | **Context 预算** | 自动追踪和管理上下文使用 |
 | **Slash 命令** | 原生 `/autopilot`、`/generate-prd`、`/implement-feature` 等 |
 
-### 快速开始
+## 快速开始
 
 ```bash
 # 1. 添加市场
@@ -120,7 +33,7 @@ claude plugin install claude-harness
 /autopilot 构建一个博客系统，支持用户注册登录
 ```
 
-### 工作流状态
+## 工作流状态
 
 | 状态 | 描述 | 类型 |
 |------|------|------|
@@ -139,7 +52,38 @@ claude plugin install claude-harness
 | `DEPLOY_PREP` | 部署就绪，等待确认 | 手动 |
 | `DONE` | 流水线完成 | — |
 
-### 可用命令
+## 工作流流水线图
+
+```
+IDEA
+  │
+  ▼
+PRD_DRAFT ──────► PRD_REVIEW
+                       │
+                       ▼
+                  ARCH_REVIEW ──────► CEO_REVIEW
+                       │                    │
+                       ▼                    ▼
+                 DESIGN_PHASE ◄────────────┘
+                       │
+                       ▼
+                 DESIGN_REVIEW ──────► IMPLEMENTATION
+                       │                      │
+                       ▼                      ▼
+                   QA_PHASE ◄──────── CODE_REVIEW
+                       │                      │
+                       ▼                      ▼
+                 SECURITY ◄────────── QA_PHASE
+                   REVIEW                    │
+                       │                     │
+                       ▼                     ▼
+                 DEPLOY_PREP ◄─────── DEPLOY
+                   _SETUP                      │
+                       │                      ▼
+                       └──────────────────► DONE
+```
+
+## 可用命令
 
 | 命令 | 描述 |
 |------|------|
@@ -159,7 +103,7 @@ claude plugin install claude-harness
 | `/setup-cicd` | 配置 CI/CD 流水线 |
 | `/monitor` | 启动监控面板 |
 
-### Autopilot 示例
+## Autopilot 示例
 
 ```bash
 # 完整应用
@@ -172,7 +116,7 @@ claude plugin install claude-harness
 /autopilot hotfix 修复登录页面的 XSS 漏洞
 ```
 
-### 项目结构
+## 项目结构
 
 ```
 claude-harness/
@@ -185,59 +129,27 @@ claude-harness/
 │       └── settings.json
 ├── scripts/                     # 工作流引擎
 │   ├── workflow.js              # CLI 入口
-│   └── lib/                     # 核心模块
-├── .claude/                     # 本地 Agent/Skill 覆盖
+│   └── lib/                    # 核心模块
+├── .claude/                    # 本地 Agent/Skill 覆盖
 │   ├── agents/
 │   └── skills/
-├── docs/                        # 工作流产出物
-├── design/                      # 设计输出
-├── state/                       # 工作流状态
-└── tests/                       # 单元测试
+├── docs/                       # 工作流产出物
+├── design/                     # 设计输出
+├── state/                      # 工作流状态
+└── tests/                     # 单元测试
 ```
 
-### 环境要求
+## 环境要求
 
 | 要求 | 版本 |
 |------|------|
 | Node.js | >= 18.0.0 |
 | Claude Code | 最新版 |
 
-### License
+## License
 
 MIT © Snow.Li
 
-### 贡献
+## 贡献
 
 欢迎贡献！请阅读 `AGENTS.md` 了解贡献指南。
-
-</div>
-
-<!-- Language Toggle Script -->
-<script>
-function showLang(lang) {
-  var enSection = document.getElementById('section-en');
-  var zhSection = document.getElementById('section-zh');
-  var btnEn = document.getElementById('btn-en');
-  var btnZh = document.getElementById('btn-zh');
-
-  if (lang === 'en') {
-    enSection.style.display = 'block';
-    zhSection.style.display = 'none';
-    btnEn.style.background = '#0066cc';
-    btnEn.style.color = 'white';
-    btnEn.style.borderColor = '#0066cc';
-    btnZh.style.background = 'white';
-    btnZh.style.color = '#333';
-    btnZh.style.borderColor = '#ccc';
-  } else {
-    enSection.style.display = 'none';
-    zhSection.style.display = 'block';
-    btnZh.style.background = '#0066cc';
-    btnZh.style.color = 'white';
-    btnZh.style.borderColor = '#0066cc';
-    btnEn.style.background = 'white';
-    btnEn.style.color = '#333';
-    btnEn.style.borderColor = '#ccc';
-  }
-}
-</script>
