@@ -5,5 +5,8 @@
   "author": {
     "name": "Snow.Li"
   },
-  "keywords": ["workflow", "multi-agent", "automation", "state-machine", "claude", "development"]
+  "keywords": ["workflow", "multi-agent", "automation", "state-machine", "claude", "development"],
+  "bin": {
+    "harness": "scripts/workflow.js"
+  }
 }
