@@ -205,7 +205,7 @@ function handleQaFailure(state) {
 }
 
 function triggerSecurityReaudit(state) {
-  const ROOT = path.join(__dirname, '..')
+  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const secReport = path.join(ROOT, 'docs/security-report.md')
   if (fs.existsSync(secReport)) { fs.unlinkSync(secReport); console.log('🗑  Cleaned stale security-report.md') }
   state.history.push({ from: state.currentState, to: 'SECURITY_REVIEW', timestamp: new Date().toISOString(), agent: 'system', type: 'security-reaudit' })
@@ -311,7 +311,7 @@ function displayStatus(state) {
 // ─── Design Baseline (保留自 v13）──────────────────────────────────────
 
 function generateDesignBaseline() {
-  const ROOT = path.join(__dirname, '..')
+  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const designDir   = path.join(ROOT, 'design')
   const statesDir   = path.join(ROOT, 'design', 'states')
   const baselineDir = path.join(ROOT, 'design', 'baseline')
@@ -393,7 +393,7 @@ function generateDesignBaseline() {
 }
 
 function verifySecurityFix() {
-  const ROOT = path.join(__dirname, '..')
+  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const reportFile = path.join(ROOT, 'docs/security-report.md')
   const fixesFile  = path.join(ROOT, 'docs/security-fixes.md')
   if (!fs.existsSync(reportFile)) { console.error('❌ docs/security-report.md not found'); process.exit(1) }
@@ -479,7 +479,7 @@ async function main() {
 
         // ── [v1.0] PRD_DRAFT → PRD_REVIEW 時清理需求注入文件 ──────────────────
         if (prevState === 'PRD_DRAFT' && state.currentState === 'PRD_REVIEW') {
-          const ROOT = path.join(__dirname, '..')
+          const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
           const requirementPath = path.join(ROOT, 'state/autopilot-requirement.md')
           if (fs.existsSync(requirementPath)) {
             fs.unlinkSync(requirementPath)
@@ -572,7 +572,7 @@ async function main() {
       // [v1.0] Autopilot mode — 全流程自動，無需人為干預確認
       // [v1.0] 支持需求描述參數注入 + hotfix 模式
       case 'init-autopilot': {
-        const ROOT = path.join(__dirname, '..')
+        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const STATE_DIR = path.join(ROOT, 'state')
 
         // 解析參數：[mode] [requirement...]
@@ -661,7 +661,7 @@ ${requirement.trim()}
 
       // [v1.0 P1.4] Feature mode — 在現有項目上添加新功能，跳過 Arch/Design 階段
       case 'init-feature': {
-        const ROOT = path.join(__dirname, '..')
+        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const hasArch = fs.existsSync(path.join(ROOT, 'docs/arch-decision.md'))
         if (!hasArch) {
           console.error('\n❌ docs/arch-decision.md 不存在')
@@ -693,7 +693,7 @@ ${requirement.trim()}
       // [v1.0 P1.1] Hotfix 模式 — 緊急修復，跳過設計/實現階段
       // [v1.0] 支持需求描述參數注入
       case 'init-hotfix': {
-        const ROOT = path.join(__dirname, '..')
+        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const STATE_DIR = path.join(ROOT, 'state')
 
         // 解析參數：[requirement...]
