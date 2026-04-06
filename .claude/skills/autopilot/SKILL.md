@@ -54,6 +54,22 @@ if (args.length === 0) {
 }
 ```
 
+## 路徑解析（必須最優先執行）
+
+**每次執行 Autopilot 的第一個 Bash 命令必須是路徑解析：**
+
+```bash
+_w=scripts/workflow.js; test -f "$_w" || _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1); echo "$_w" > /tmp/.harness_wf; echo "harness: $_w"
+```
+
+後續所有 workflow 命令統一使用以下格式（替代裸 `node scripts/workflow.js`）：
+
+```bash
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" <subcommand>
+```
+
+---
+
 ## 前置檢查
 
 ```
@@ -70,7 +86,7 @@ Read state/workflow-state.json
 if (!state.autopilot) {
   // 如果有需求描述，直接啟用，無需詢問
   if (requirement) {
-    Bash: node scripts/workflow.js init-autopilot <mode> "<requirement>"
+    Bash: HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" init-autopilot <mode> "<requirement>"
   } else {
     // 傳統方式，詢問用戶選擇模式
     問用戶：
@@ -83,7 +99,7 @@ if (!state.autopilot) {
      確認啟用？(A/B)"
 
     用戶選擇後：
-    Bash: node scripts/workflow.js init-autopilot <greenfield|feature>
+    Bash: HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" init-autopilot <greenfield|feature>
   }
 }
 ```
@@ -95,10 +111,10 @@ if (!state.autopilot) {
 ```
 while (currentState !== 'DONE') {
   1. Read state/workflow-state.json → 獲取 currentState
-  2. 檢查前置條件 → node scripts/workflow.js check
+  2. 檢查前置條件 → HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" check
   3. 派發對應 Agent（見派發表）
   4. 等待 Agent 完成（檢查產出物）
-  5. 推進狀態 → node scripts/workflow.js advance
+  5. 推進狀態 → HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
   6. 處理異常（見異常處理表）
 }
 ```
@@ -153,8 +169,8 @@ Prompt:
 目標：生成 docs/prd.md
 
 完成後執行：
-node scripts/workflow.js validate-doc prd
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc prd
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -175,9 +191,9 @@ Prompt:
 3. 產出 docs/traceability-matrix.md
 
 完成後執行：
-node scripts/workflow.js validate-doc arch
-node scripts/workflow.js validate-doc security-baseline
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc arch
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc security-baseline
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -202,9 +218,9 @@ Prompt:
 [注意] 不使用任何 MCP 工具生成設計稿，完全由 Designer 自行用 HTML/CSS/內聯樣式編寫，確保真實體現設計系統視覺規範。
 
 完成後執行：
-node scripts/workflow.js validate-doc design-spec
-node scripts/workflow.js check CEO_REVIEW
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc design-spec
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" check CEO_REVIEW
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -229,8 +245,8 @@ Prompt:
 - 不要求用戶確認
 
 完成後執行：
-node scripts/workflow.js validate-doc ceo-review
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc ceo-review
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -252,8 +268,8 @@ Prompt:
 - 直接將默認交互行為寫入 docs/interaction-spec.md
 
 完成後執行：
-node scripts/workflow.js validate-doc interaction-spec
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc interaction-spec
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -275,9 +291,9 @@ Prompt:
 4. 更新追溯矩陣所有 Must 為 ✅
 
 完成後執行：
-node scripts/workflow.js validate-doc api-spec
-node scripts/workflow.js integration-check
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc api-spec
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" integration-check
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -300,7 +316,7 @@ Prompt:
 若 FAIL：詳細列出問題，要求 FE/BE 修復
 
 完成後執行：
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -321,12 +337,12 @@ Prompt:
 3. 產出 docs/test-report.md
 
 若發現 P0/P1 bug：
-- 執行 node scripts/workflow.js qa-failure
+- 執行 HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" qa-failure
 - 等待修復後重新測試
 
 完成後執行：
-node scripts/workflow.js validate-doc test-report
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc test-report
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -334,7 +350,7 @@ node scripts/workflow.js advance
 
 ```
 [Autopilot 自動推進]
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 ```
 
 ### SECURITY_REVIEW → DEPLOY_PREP_SETUP
@@ -358,7 +374,7 @@ Prompt:
 - 等待修復後執行 security-reaudit
 
 完成後執行：
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -380,8 +396,8 @@ Prompt:
 4. 寫 Dockerfile
 
 完成後執行：
-node scripts/workflow.js validate-doc deploy-plan
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" validate-doc deploy-plan
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 "
 ```
 
@@ -389,7 +405,7 @@ node scripts/workflow.js advance
 
 ```
 [Autopilot 自動推進]
-node scripts/workflow.js advance
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 
 🎉 流程完成！
 ```
@@ -418,7 +434,7 @@ node scripts/workflow.js advance
 用戶說："暫停"、"停止 autopilot"、"我要確認"
 
 執行：
-node scripts/workflow.js stop-autopilot
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" stop-autopilot
 
 告知用戶當前狀態，等待進一步指令。
 ```
@@ -429,7 +445,7 @@ node scripts/workflow.js stop-autopilot
 用戶說："繼續 autopilot"、"恢復自動"
 
 執行：
-node scripts/workflow.js init-autopilot <mode>
+HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" init-autopilot <mode>
 
 繼續核心循環。
 ```
