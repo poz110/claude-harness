@@ -11,9 +11,9 @@
 
 ## 安装
 
-### 方式一：插件市场安装（推荐）
+### 方式一：插件市场安装
 
-适合只使用独立技能命令（`/generate-prd`、`/generate-design` 等）的场景。
+适合单次使用独立技能命令的场景。
 
 ```bash
 claude plugin marketplace add poz110/claude-harness
@@ -21,6 +21,8 @@ claude plugin install claude-harness
 ```
 
 安装完成后，所有 slash 命令即刻可用。
+
+> **局限**：无状态持久化。每个技能命令独立执行，对话结束后不记录进度，无法跨会话追踪"当前在哪个阶段"。如需完整的多轮工作流，请使用方式二。
 
 ### 方式二：源码安装（完整功能，含 Autopilot）
 
