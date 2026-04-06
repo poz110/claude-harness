@@ -4,68 +4,109 @@
 
 ## 特性
 
-- **12 个专职 Agent** - PM、架构师、设计师、全栈工程师、评审、QA、安全、DevOps 等
-- **14 状态流水线** - 想法 → PRD → 架构 → 设计 → 实现 → QA → 安全 → 部署
-- **Autopilot 模式** - 全自动工作流，说出需求即可
-- **Context 预算** - 自动追踪和管理上下文使用
+- **12 个专职 Agent** — PM、架构师、设计师、全栈工程师、评审、QA、安全、DevOps 等
+- **14 步状态流水线** — 想法 → PRD → 架构 → 设计 → 实现 → QA → 安全 → 部署
+- **Autopilot 模式** — 全自动工作流，说出需求即可驱动全流程
+- **Context 预算** — 自动追踪和管理上下文使用
 
 ## 安装
+
+### 方式一：插件市场安装（推荐）
+
+适合只使用独立技能命令（`/generate-prd`、`/generate-design` 等）的场景。
 
 ```bash
 claude plugin marketplace add poz110/claude-harness
 claude plugin install claude-harness
 ```
 
+安装完成后，所有 slash 命令即刻可用。
+
+### 方式二：源码安装（完整功能，含 Autopilot）
+
+`/autopilot` 依赖工作流引擎（`scripts/workflow.js`）和项目状态文件（`state/`），需要在 harness 源码目录内运行。
+
+```bash
+# 1. 克隆源码
+git clone https://github.com/poz110/claude-harness.git
+cd claude-harness
+
+# 2. 安装 Node.js 依赖（如有）
+# node >= 18.0.0 即可，无需 npm install
+
+# 3. 初始化：将 agents/skills/hooks 安装到全局 ~/.claude/
+node scripts/workflow.js init
+
+# 4. 验证安装
+node scripts/workflow.js status
+```
+
+> **说明**：`/init` 命令与 `node scripts/workflow.js init` 等价，必须在 claude-harness 源码目录内执行。
+
+---
+
 ## 使用
 
-```bash
-# 全自动流程
-/autopilot 构建一个博客系统
+### Autopilot — 全自动流程（需源码安装）
 
-# 单个命令
+```bash
+# 进入 claude-harness 源码目录后，在 Claude Code 中输入：
+/autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
+/autopilot feature 给现有系统添加用户头像上传功能
+/autopilot hotfix 修复登录页 CSRF token 漏洞
+```
+
+Autopilot 会自动调度所有 Agent，无需人工确认，直到项目完成。
+
+### 独立技能命令（插件安装即可用）
+
+```bash
 /generate-prd           # 生成产品需求文档
 /generate-design        # 创建设计系统
-/implement-feature      # 实现功能
-/arch-review           # 架构评审
-/code-review-arch      # 代码审查
-/qa                    # QA 测试
-/owasp-scan            # 安全扫描
-/hotfix <问题>        # 紧急修复
-/monitor               # 监控面板
+/implement-feature      # 实现前端功能
+/implement-api          # 实现后端 API
+/arch-review            # 架构评审（生成 ADR）
+/code-review-arch       # 代码审查
+/owasp-scan             # OWASP 安全扫描
+/prepare-tests          # 生成测试计划和用例
+/setup-cicd             # 配置 CI/CD
+/hotfix <问题描述>      # 紧急修复模式
+/monitor                # 启动监控面板
 ```
 
-## 工作流状态
-
-```
-IDEA → PRD_DRAFT → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW → DESIGN_PHASE
-     → DESIGN_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE
-     → SECURITY_REVIEW → DEPLOY_PREP_SETUP → DEPLOY_PREP → DONE
-```
-
-| 状态 | 描述 |
-|------|------|
-| `IDEA` | 初始想法，PM 生成 PRD |
-| `PRD_DRAFT` | PRD 已生成，等待审核 |
-| `PRD_REVIEW` | 架构师审核中 |
-| `ARCH_REVIEW` | ADR 完成，设计师工作中 |
-| `CEO_REVIEW` | CEO 审核 UX 逻辑 |
-| `DESIGN_PHASE` | 设计完成，等待审核 |
-| `DESIGN_REVIEW` | 全栈工程师实现中 |
-| `IMPLEMENTATION` | 实现中，评审审计中 |
-| `CODE_REVIEW` | 代码评审完成，QA 测试中 |
-| `QA_PHASE` | QA 完成，等待审核 |
-| `SECURITY_REVIEW` | 安全审计中 |
-| `DEPLOY_PREP_SETUP` | DevOps 准备部署中 |
-| `DEPLOY_PREP` | 部署就绪，等待确认 |
-| `DONE` | 完成 |
-
-## CLI 命令
+### 工作流 CLI（需源码安装）
 
 ```bash
-harness status         # 当前状态
-harness advance        # 推进状态
-harness check          # 检查前置条件
+node scripts/workflow.js status       # 查看当前状态
+node scripts/workflow.js advance      # 推进到下一阶段
+node scripts/workflow.js check        # 检查前置条件
+node scripts/workflow.js init-feature # 增量功能模式（跳过架构/设计）
 ```
+
+---
+
+## 工作流状态机
+
+```
+IDEA → PRD_DRAFT* → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW* → DESIGN_PHASE*
+     → DESIGN_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE*
+     → SECURITY_REVIEW → DEPLOY_PREP_SETUP → DEPLOY_PREP* → DONE
+
+* = 人工确认节点（Autopilot 模式下自动通过）
+```
+
+| 状态 | Agent | 产出物 |
+|------|-------|--------|
+| `IDEA` | product-manager | `docs/prd.md` |
+| `PRD_REVIEW` | software-architect | `docs/arch-decision.md` |
+| `ARCH_REVIEW` | ux-designer | `DESIGN.md`, `docs/design-spec.md` |
+| `CEO_REVIEW` | plan-ceo-review | `docs/ceo-review.md` |
+| `DESIGN_REVIEW` | fullstack-engineer | `docs/api-spec.md`, 代码 |
+| `CODE_REVIEW` | qa-engineer | `docs/test-report.md` |
+| `SECURITY_REVIEW` | security-auditor | `docs/security-report.md` |
+| `DEPLOY_PREP_SETUP` | devops-engineer | `docs/deploy-plan.md`, `Dockerfile` |
+
+---
 
 ## 环境要求
 
