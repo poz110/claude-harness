@@ -20,6 +20,19 @@ claude plugin install claude-harness
 
 安装完成后，所有命令即刻可用，包括 `/autopilot` 全流程自动模式。工作流状态写入当前项目目录的 `state/`，跨会话持久保存。
 
+**安装后使用：**
+
+```bash
+# 1. 进入你的项目目录
+cd your-project
+
+# 2. 用 dangerously-skip-permissions 模式启动 Claude（autopilot 需要自动执行命令）
+claude --dangerously-skip-permissions
+
+# 3. 在 Claude 中输入
+/autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
+```
+
 > **已安装旧版本？** 运行 `claude plugin update claude-harness` 升级到最新版本，旧版本存在 hook 报错和 `/autopilot` 路径解析问题。
 
 ### 方式二：源码安装
