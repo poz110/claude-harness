@@ -11,54 +11,41 @@
 
 ## 安装
 
-### 方式一：插件市场安装
-
-适合单次使用独立技能命令的场景。
+### 方式一：插件市场安装（推荐）
 
 ```bash
 claude plugin marketplace add poz110/claude-harness
 claude plugin install claude-harness
 ```
 
-安装完成后，所有 slash 命令即刻可用。
+安装完成后，所有命令即刻可用，包括 `/autopilot` 全流程自动模式。工作流状态写入当前项目目录的 `state/`，跨会话持久保存。
 
-> **局限**：无状态持久化。每个技能命令独立执行，对话结束后不记录进度，无法跨会话追踪"当前在哪个阶段"。如需完整的多轮工作流，请使用方式二。
+> **已安装旧版本？** 运行 `claude plugin update claude-harness` 升级到最新版本，旧版本存在 hook 报错和 `/autopilot` 路径解析问题。
 
-### 方式二：源码安装（完整功能，含 Autopilot）
+### 方式二：源码安装
 
-`/autopilot` 依赖工作流引擎（`scripts/workflow.js`）和项目状态文件（`state/`），需要在 harness 源码目录内运行。
+适合需要修改工作流引擎本身，或贡献代码的场景。
 
 ```bash
-# 1. 克隆源码
 git clone https://github.com/poz110/claude-harness.git
 cd claude-harness
-
-# 2. 安装 Node.js 依赖（如有）
-# node >= 18.0.0 即可，无需 npm install
-
-# 3. 初始化：将 agents/skills/hooks 安装到全局 ~/.claude/
-node scripts/workflow.js init
-
-# 4. 验证安装
-node scripts/workflow.js status
+node scripts/workflow.js init   # 将 agents/skills/hooks 安装到全局 ~/.claude/
+node scripts/workflow.js status # 验证安装
 ```
-
-> **说明**：`/init` 命令与 `node scripts/workflow.js init` 等价，必须在 claude-harness 源码目录内执行。
 
 ---
 
 ## 使用
 
-### Autopilot — 全自动流程（需源码安装）
+### Autopilot — 全自动流程
 
 ```bash
-# 进入 claude-harness 源码目录后，在 Claude Code 中输入：
 /autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
 /autopilot feature 给现有系统添加用户头像上传功能
 /autopilot hotfix 修复登录页 CSRF token 漏洞
 ```
 
-Autopilot 会自动调度所有 Agent，无需人工确认，直到项目完成。
+Autopilot 会自动调度所有 Agent，无需人工确认，直到项目完成。状态保存在当前目录 `state/workflow-state.json`，重启会话后可继续上次进度。
 
 ### 独立技能命令（插件安装即可用）
 
