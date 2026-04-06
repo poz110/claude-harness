@@ -1,478 +1,226 @@
 ---
 name: autopilot
-description: "全流程自動模式：從當前狀態一路推進到 DONE，無需人為干預確認。自動推進 MANUAL 節點、派發 Agent、處理失敗回滾，直到項目完成。支持傳入需求描述，自動注入後續流程。"
+description: "全自动模式：直接派发 PM Agent 生成 PRD，自动推进整个开发流程"
 ---
 
-# Autopilot — 全流程自動駕駛
+# Autopilot — 全流程自动驾驶
 
 ## 用法
 
-```bash
-/autopilot <需求描述>                      # 完整流程 + 需求描述
-/autopilot greenfield <需求描述>          # 完整流程（默認）
-/autopilot feature <需求描述>             # 增量功能
-/autopilot hotfix <需求描述>              # 緊急修復
-/autopilot                                # 傳統方式（會追問需求）
+```
+/autopilot <需求描述>
 ```
 
-**示例**：
-```
-/autopilot 構建一個用戶認證系統，支持郵箱註冊、登錄、OAuth登錄、密碼重置
-/autopilot feature 添加用戶頭像上傳功能，支持裁剪和壓縮
-/autopilot hotfix 修復登錄頁面的 CSRF token 漏洞
-```
+## 触发条件
 
-## 觸發條件
-
-用戶說：
+用户说：
 - "/autopilot <需求描述>"
-- "/autopilot greenfield <需求描述>"
-- "/autopilot feature <需求描述>"
-- "/autopilot hotfix <需求描述>"
-- "autopilot"（傳統方式）
-- "全流程自動"
-- "無需確認全程推進"
-- "一鍵完成整個流程"
+- "全自动"
+- "自动完成"
+- "从头到尾"
 
-## 參數解析
+## 执行流程
+
+### Step 1: 派发 PM Agent 生成 PRD
 
 ```
-args = 用戶輸入除去 "/autopilot" 後的部分
-
-if (args.length === 0) {
-  // 傳統方式，無需求注入
-  mode = 'greenfield'
-  requirement = null
-} else if (args[0] === 'greenfield' || args[0] === 'feature' || args[0] === 'hotfix') {
-  // 明確指定模式
-  mode = args[0]
-  requirement = args.slice(1).join(' ')
-} else {
-  // 只傳需求描述，默認 greenfield
-  mode = 'greenfield'
-  requirement = args.join(' ')
-}
-```
-
-## 前置檢查
-
-```
-1. 確認 autopilot 模式已啟用：
-   - 已啟用 → 繼續執行
-   - 未啟用 → 先執行啟用流程
-```
-
-### 啟用流程（若未啟用）
-
-```
-Read state/workflow-state.json
-
-if (!state.autopilot) {
-  // 如果有需求描述，直接啟用，無需詢問
-  if (requirement) {
-    Bash: node scripts/workflow.js init-autopilot <mode> "<requirement>"
-  } else {
-    // 傳統方式，詢問用戶選擇模式
-    問用戶：
-    "🤖 Autopilot 模式將自動推進所有 MANUAL 節點（PRD_DRAFT、CEO_REVIEW、DESIGN_PHASE、QA_PHASE、DEPLOY_PREP），無需人為確認。
-
-     選擇模式：
-     A. greenfield — 全新項目，完整流程
-     B. feature    — 增量功能，跳過 Arch/Design 階段
-
-     確認啟用？(A/B)"
-
-    用戶選擇後：
-    Bash: node scripts/workflow.js init-autopilot <greenfield|feature>
-  }
-}
-```
-
----
-
-## 核心循環
-
-```
-while (currentState !== 'DONE') {
-  1. Read state/workflow-state.json → 獲取 currentState
-  2. 檢查前置條件 → node scripts/workflow.js check
-  3. 派發對應 Agent（見派發表）
-  4. 等待 Agent 完成（檢查產出物）
-  5. 推進狀態 → node scripts/workflow.js advance
-  6. 處理異常（見異常處理表）
-}
-```
-
----
-
-## 狀態派發表
-
-| 狀態 | 派發 Agent | 產出物 | 驗收命令 |
-|------|-----------|--------|---------|
-| IDEA | product-manager | `docs/prd.md` | `validate-doc prd` |
-| PRD_DRAFT | — 自動推進 | — | `advance` (autopilot auto-force) |
-| PRD_REVIEW | software-architect | `docs/arch-decision.md`<br>`docs/security-baseline.md`<br>`docs/traceability-matrix.md` | `validate-doc arch`<br>`validate-doc security-baseline` |
-| ARCH_REVIEW | ux-designer | `DESIGN.md`<br>`docs/design-spec.md` | `validate-doc design-spec`<br>`check CEO_REVIEW` |
-| CEO_REVIEW | plan-ceo-review | `docs/ceo-review.md` | `validate-doc ceo-review` |
-| DESIGN_PHASE | — 自動推進 | `docs/interaction-spec.md` | `validate-doc interaction-spec` |
-| DESIGN_REVIEW | fullstack-engineer | 代碼<br>`docs/api-spec.md` | `validate-doc api-spec`<br>`integration-check` |
-| IMPLEMENTATION | code-reviewer | `docs/code-review.md` | `validate-doc code-review`（如有） |
-| CODE_REVIEW | qa-engineer | `docs/test-plan.md`<br>`docs/test-report.md` | `validate-doc test-report` |
-| QA_PHASE | — 自動推進 | — | `advance` (autopilot auto-force) |
-| SECURITY_REVIEW | security-auditor | `docs/security-report.md` | — |
-| DEPLOY_PREP_SETUP | devops-engineer | `docs/deploy-plan.md`<br>`docs/runbook.md` | `validate-doc deploy-plan` |
-| DEPLOY_PREP | — 自動推進 | — | `advance` (autopilot auto-force) |
-| DONE | — 結束 | — | 🎉 |
-
----
-
-## Agent 派發模板
-
-### IDEA → PRD_DRAFT
-
-```
-Agent: product-manager
-
-// 檢查是否有需求注入
-Read state/autopilot-requirement.md
+Agent: pm
 
 Prompt:
 "
-你是 Product Manager，負責生成 PRD。
+你是 Product Manager，负责生成产品需求文档。
 
-[Autopilot 模式]
-- 跳過 office-hours 追問環節
-- 使用合理的假設填補信息缺口
-- Appetite 默認 Small Batch
-- Scope mode 默認 core
+用户需求：{用户输入的需求描述}
 
-[需求注入]
-- 如果存在 state/autopilot-requirement.md，直接讀取其中的需求描述作為初始需求
-- 基於該需求生成 PRD，無需追問用戶
+请生成 docs/prd.md，包含：
+1. 项目概述和目标
+2. 用户故事和功能需求（Must/Should/Could）
+3. 技术约束和假设
+4. MVP 范围定义
+5. 验收标准
 
-目標：生成 docs/prd.md
+输出文件：docs/prd.md
 
-完成後執行：
-node scripts/workflow.js validate-doc prd
-node scripts/workflow.js advance
+完成后，告诉用户 PRD 已生成，可以继续下一步。
 "
 ```
 
-### PRD_REVIEW → ARCH_REVIEW
+### Step 2: 派发 Architect Agent 生成 ADR
 
 ```
-Agent: software-architect
+Agent: architect
 
 Prompt:
 "
-你是 Software Architect，負責架構決策。
+你是 Software Architect，负责架构决策。
 
 前置：Read docs/prd.md
 
-目標：
-1. 產出 docs/arch-decision.md（含 4 張 ASCII 圖）
-2. 產出 docs/security-baseline.md
-3. 產出 docs/traceability-matrix.md
+请生成以下文档：
+1. docs/arch-decision.md — 包含架构图（数据流、组件图）
+2. docs/security-baseline.md — 安全需求
+3. docs/traceability-matrix.md — 需求追溯矩阵
 
-完成後執行：
-node scripts/workflow.js validate-doc arch
-node scripts/workflow.js validate-doc security-baseline
-node scripts/workflow.js advance
+完成后，告诉用户架构已完成。
 "
 ```
 
-### ARCH_REVIEW → CEO_REVIEW
+### Step 3: 派发 Designer Agent 生成设计
 
 ```
-Agent: ux-designer
+Agent: designer
 
 Prompt:
 "
-你是 UX Designer，負責設計系統和視覺規範。
+你是 UX Designer，负责设计系统。
 
 前置：Read docs/prd.md, docs/arch-decision.md
 
-目標：
-1. 產出 DESIGN.md（設計系統）
-2. 產出 docs/design-spec.md（80 項審計 ≥40/80）
-3. 直接編寫 HTML/CSS 設計稿（不調用 Stitch MCP，由 Designer 自行實現）
-   - 為 design-spec.md 中每個頁面生成 design/{page-slug}/desktop.html
-   - 生成 design/index.html 作為設計稿入口
+请生成：
+1. DESIGN.md — 设计系统（颜色、字体、间距等）
+2. docs/design-spec.md — 设计规格说明
 
-[注意] 不使用任何 MCP 工具生成設計稿，完全由 Designer 自行用 HTML/CSS/內聯樣式編寫，確保真實體現設計系統視覺規範。
-
-完成後執行：
-node scripts/workflow.js validate-doc design-spec
-node scripts/workflow.js check CEO_REVIEW
-node scripts/workflow.js advance
+完成后，告诉用户设计已完成。
 "
 ```
 
-### CEO_REVIEW → DESIGN_PHASE
+### Step 4: 派发 FullStack Agent 实现
 
 ```
-Agent: plan-ceo-review
+Agent: fullstack
 
 Prompt:
 "
-你是 CEO Reviewer，負責 UX 邏輯審視。
+你是 Full-Stack Engineer，负责实现。
 
 前置：Read docs/prd.md, docs/arch-decision.md, docs/design-spec.md
 
-目標：產出 docs/ceo-review.md
-- 對 5 個維度評分（0-10）
-- 提供決策建議
-- 平均分低於 6 分時建議回滾
+请实现：
+1. docs/api-spec.md — API 规格
+2. apps/web/ — 前端代码
+3. apps/server/ — 后端代码
 
-[Autopilot 模式]
-- 自動接受所有建議
-- 不要求用戶確認
-
-完成後執行：
-node scripts/workflow.js validate-doc ceo-review
-node scripts/workflow.js advance
+完成后，告诉用户代码已实现。
 "
 ```
 
-### DESIGN_PHASE → DESIGN_REVIEW
+### Step 5: 派发 Reviewer Agent 代码审查
 
 ```
-[Autopilot 模式]
-- 跳過交互意圖確認環節
-- Designer 直接生成 interaction-spec.md
-
-Agent: ux-designer (Phase B)
+Agent: reviewer
 
 Prompt:
 "
-繼續 DESIGN_PHASE 階段 Phase B。
+你是 Code Reviewer，负责代码审查。
 
-[Autopilot 模式]
-- 用戶已自動確認所有交互意圖
-- 直接將默認交互行為寫入 docs/interaction-spec.md
+前置：Read docs/api-spec.md, apps/web/, apps/server/
 
-完成後執行：
-node scripts/workflow.js validate-doc interaction-spec
-node scripts/workflow.js advance
+请执行：
+1. 构建验证：npm run build
+2. 类型检查：npx tsc --noEmit
+3. 生成 docs/code-review.md
+
+如果发现问题，详细列出并要求修复。
 "
 ```
 
-### DESIGN_REVIEW → IMPLEMENTATION
+### Step 6: 派发 QA Agent 测试
 
 ```
-Agent: fullstack-engineer
+Agent: qa
 
 Prompt:
 "
-你是 Full-Stack Engineer，負責 API 先行 → BE → FE 全棧實現。
-
-前置：Read docs/traceability-matrix.md, docs/design-spec.md, DESIGN.md
-
-目標：
-1. 寫 docs/api-spec.md（API 先行）
-2. 實現 BE（Bun + Hono + Drizzle）
-3. 實現 FE（Next.js + React + shadcn）
-4. 更新追溯矩陣所有 Must 為 ✅
-
-完成後執行：
-node scripts/workflow.js validate-doc api-spec
-node scripts/workflow.js integration-check
-node scripts/workflow.js advance
-"
-```
-
-### IMPLEMENTATION → CODE_REVIEW
-
-```
-Agent: code-reviewer
-
-Prompt:
-"
-你是 Code Reviewer，負責代碼審查。
-
-前置：Read docs/api-spec.md, docs/arch-decision.md
-
-目標：產出 docs/code-review.md
-- 構建驗證：npm run build
-- 類型檢查：npx tsc --noEmit
-- 設計合規：對照 design/ 檢查實現
-
-若 FAIL：詳細列出問題，要求 FE/BE 修復
-
-完成後執行：
-node scripts/workflow.js advance
-"
-```
-
-### CODE_REVIEW → QA_PHASE
-
-```
-Agent: qa-engineer
-
-Prompt:
-"
-你是 QA Engineer，負責測試。
+你是 QA Engineer，负责测试。
 
 前置：Read docs/traceability-matrix.md, docs/api-spec.md
 
-目標：
-1. 產出 docs/test-plan.md
-2. 執行測試（單元 + E2E + 視覺回歸）
-3. 產出 docs/test-report.md
+请执行：
+1. 编写测试计划
+2. 执行单元测试和 E2E 测试
+3. 生成 docs/test-report.md
 
-若發現 P0/P1 bug：
-- 執行 node scripts/workflow.js qa-failure
-- 等待修復後重新測試
-
-完成後執行：
-node scripts/workflow.js validate-doc test-report
-node scripts/workflow.js advance
+如果发现 P0/P1 bug，报告给用户。
 "
 ```
 
-### QA_PHASE → SECURITY_REVIEW
-
-```
-[Autopilot 自動推進]
-node scripts/workflow.js advance
-```
-
-### SECURITY_REVIEW → DEPLOY_PREP_SETUP
+### Step 7: 派发 Security Auditor
 
 ```
 Agent: security-auditor
 
 Prompt:
 "
-你是 Security Auditor，負責 OWASP 審計。
+你是 Security Auditor，负责安全审计。
 
 前置：Read docs/security-baseline.md
 
-目標：產出 docs/security-report.md
-- OWASP Top 10 掃描
-- 依賴漏洞檢查
-- 威脅建模
+请执行 OWASP Top 10 安全扫描，生成 docs/security-report.md。
 
-若發現 Critical/High：
-- 列出修復建議
-- 等待修復後執行 security-reaudit
-
-完成後執行：
-node scripts/workflow.js advance
+如果发现 Critical/High 漏洞，详细说明。
 "
 ```
 
-### DEPLOY_PREP_SETUP → DEPLOY_PREP
+### Step 8: 派发 DevOps Agent 部署
 
 ```
-Agent: devops-engineer
+Agent: devops
 
 Prompt:
 "
-你是 DevOps Engineer，負責部署準備。
+你是 DevOps Engineer，负责部署配置。
 
 前置：Read docs/prd.md, docs/arch-decision.md
 
-目標：
-1. 產出 docs/deploy-plan.md
-2. 產出 docs/runbook.md
-3. 配置 CI/CD（GitHub Actions）
-4. 寫 Dockerfile
+请生成：
+1. docs/deploy-plan.md — 部署计划
+2. docs/runbook.md — 运维手册
+3. Dockerfile
+4. .github/workflows/deploy.yml
 
-完成後執行：
-node scripts/workflow.js validate-doc deploy-plan
-node scripts/workflow.js advance
+完成后，告诉用户可以部署了。
 "
 ```
 
-### DEPLOY_PREP → DONE
+### 完成
 
 ```
-[Autopilot 自動推進]
-node scripts/workflow.js advance
+🎉 全流程完成！
 
-🎉 流程完成！
-```
-
----
-
-## 異常處理
-
-| 異常 | 檢測方式 | 處理 |
-|------|---------|------|
-| 前置條件缺失 | `check` 返回 missing | 派發對應 Agent 補產出物 |
-| validate-doc 失敗 | 返回 non-zero | 派發 Agent 修復，重新驗證 |
-| Code Review FAIL | code-review.md 含 FAIL | 派發 fullstack-engineer 修復，rollback IMPLEMENTATION |
-| QA P0/P1 bug | test-report.md 含 P0/P1 | 執行 qa-failure，派發 fullstack-engineer 修復 |
-| Security Critical/High | security-report.md 含 Critical | 派發 fullstack-engineer 修復，執行 security-reaudit |
-| CEO 審視 < 6分 | ceo-review.md 平均分 < 6 | rollback PRD_REVIEW，重新審視需求 |
-| Agent 超時/失敗 | 無產出物 | 重試 1 次，仍失敗則暫停 autopilot |
-
----
-
-## 暫停/恢復
-
-### 暫停 Autopilot
-
-```
-用戶說："暫停"、"停止 autopilot"、"我要確認"
-
-執行：
-node scripts/workflow.js stop-autopilot
-
-告知用戶當前狀態，等待進一步指令。
-```
-
-### 恢復 Autopilot
-
-```
-用戶說："繼續 autopilot"、"恢復自動"
-
-執行：
-node scripts/workflow.js init-autopilot <mode>
-
-繼續核心循環。
-```
-
----
-
-## 完成通知
-
-當 `currentState === 'DONE'` 時：
-
-```
-🎉 全流程自動完成！
-
-產出物：
+产出物：
 - docs/prd.md
 - docs/arch-decision.md
 - docs/security-baseline.md
+- docs/traceability-matrix.md
 - DESIGN.md
 - docs/design-spec.md
-- docs/interaction-spec.md
 - docs/api-spec.md
-- docs/traceability-matrix.md
 - docs/code-review.md
-- docs/test-plan.md
 - docs/test-report.md
 - docs/security-report.md
 - docs/deploy-plan.md
 - docs/runbook.md
-- apps/web/ (FE 代碼)
-- apps/server/ (BE 代碼)
-
-下一步：
-- 查看部署計劃：cat docs/deploy-plan.md
-- 運行應用：npm run dev
-- 部署到生產：按 runbook.md 執行
+- apps/web/ (前端代码)
+- apps/server/ (后端代码)
 ```
 
 ---
 
-## 禁止行為
+## 错误处理
 
-- 不跳過產出物驗證（validate-doc 必須通過）
-- 不在 FAIL 狀態下推進
+| 异常 | 处理 |
+|------|------|
+| PRD 失败 | 报告给用户，重新生成 |
+| 架构问题 | 报告给用户，修复后继续 |
+| 实现失败 | 详细列出问题，要求修复 |
+| Code Review FAIL | 要求修复后重新审查 |
+| QA 发现 P0/P1 bug | 要求修复后重新测试 |
+| Security Critical | 要求修复后重新审计 |
+
+---
+
+## 禁止行为
+
+- 不跳过任何必要阶段
+- 不在失败时继续推进
 - 不忽略 Critical/High 安全漏洞
-- 不繞過 qa-failure 機制
-- 不在用戶主動暫停時繼續推進
