@@ -66,7 +66,7 @@ function hookPostWrite() {
   const event   = readHookInput()
   const filePath = event?.tool_input?.path || ''
   const relPath  = path.relative(ROOT, path.isAbsolute(filePath) ? filePath : path.join(ROOT, filePath))
-  const state    = loadState()
+  let state      = loadState()
   const messages = []
 
   // 1. Auto-validate documents
@@ -134,7 +134,7 @@ function hookPostBash() {
   const event  = readHookInput()
   const cmd    = event?.tool_input?.command || ''
   const output = event?.tool_response?.content || ''
-  const state  = loadState()
+  let state    = loadState()
   const messages = []
 
   // [v1.0] P0.2：自动 context 追踪（Bash 操作）
