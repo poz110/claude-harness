@@ -1,17 +1,22 @@
 # claude-harness
 
 > A state machine driven multi-agent development workflow for Claude Code
->
-> 基于 Claude Code 的多 Agent 协作开发工作流系统
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-v3.5%2B-blue)](https://claude.com/code)
 
+<!-- Language Toggle / 语言切换 -->
+<div id="lang-toggle" style="margin: 20px 0;">
+  <button onclick="showLang('en')" id="btn-en" style="padding:8px 16px;margin-right:8px;cursor:pointer;background:#0066cc;color:white;border:1px solid #0066cc;border-radius:4px;">English</button>
+  <button onclick="showLang('zh')" id="btn-zh" style="padding:8px 16px;cursor:pointer;background:white;color:#333;border:1px solid #ccc;border-radius:4px;">中文</button>
+</div>
+
 ---
 
-## English
+<!-- English Section -->
+<div id="section-en">
 
-### Features
+## Features
 
 | Feature | Description |
 |---------|-------------|
@@ -74,11 +79,20 @@ IDEA → PRD_DRAFT → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW → DESIGN_PHAS
 | Node.js | >= 18.0.0 |
 | Claude Code | Latest |
 
----
+### License
 
-## 中文
+MIT © Snow.Li
 
-### 特性
+### Contributing
+
+Contributions welcome! Please read `AGENTS.md` for contribution guidelines.
+
+</div>
+
+<!-- Chinese Section -->
+<div id="section-zh" style="display:none;">
+
+## 特性
 
 | 特性 | 描述 |
 |------|------|
@@ -171,14 +185,14 @@ claude-harness/
 │       └── settings.json
 ├── scripts/                     # 工作流引擎
 │   ├── workflow.js              # CLI 入口
-│   └── lib/                    # 核心模块
-├── .claude/                    # 本地 Agent/Skill 覆盖
+│   └── lib/                     # 核心模块
+├── .claude/                     # 本地 Agent/Skill 覆盖
 │   ├── agents/
 │   └── skills/
-├── docs/                       # 工作流产出物
-├── design/                     # 设计输出
-├── state/                      # 工作流状态
-└── tests/                      # 单元测试
+├── docs/                        # 工作流产出物
+├── design/                      # 设计输出
+├── state/                       # 工作流状态
+└── tests/                       # 单元测试
 ```
 
 ### 环境要求
@@ -188,14 +202,42 @@ claude-harness/
 | Node.js | >= 18.0.0 |
 | Claude Code | 最新版 |
 
----
-
-## License
+### License
 
 MIT © Snow.Li
 
-## Contributing
-
-Contributions welcome! Please read `AGENTS.md` for contribution guidelines.
+### 贡献
 
 欢迎贡献！请阅读 `AGENTS.md` 了解贡献指南。
+
+</div>
+
+<!-- Language Toggle Script -->
+<script>
+function showLang(lang) {
+  var enSection = document.getElementById('section-en');
+  var zhSection = document.getElementById('section-zh');
+  var btnEn = document.getElementById('btn-en');
+  var btnZh = document.getElementById('btn-zh');
+
+  if (lang === 'en') {
+    enSection.style.display = 'block';
+    zhSection.style.display = 'none';
+    btnEn.style.background = '#0066cc';
+    btnEn.style.color = 'white';
+    btnEn.style.borderColor = '#0066cc';
+    btnZh.style.background = 'white';
+    btnZh.style.color = '#333';
+    btnZh.style.borderColor = '#ccc';
+  } else {
+    enSection.style.display = 'none';
+    zhSection.style.display = 'block';
+    btnZh.style.background = '#0066cc';
+    btnZh.style.color = 'white';
+    btnZh.style.borderColor = '#0066cc';
+    btnEn.style.background = 'white';
+    btnEn.style.color = '#333';
+    btnEn.style.borderColor = '#ccc';
+  }
+}
+</script>
