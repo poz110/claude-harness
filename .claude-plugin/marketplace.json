@@ -1,0 +1,15 @@
+{
+  "name": "claude-harness",
+  "owner": {
+    "name": "Snow.Li",
+    "email": ""
+  },
+  "plugins": [
+    {
+      "name": "claude-harness",
+      "source": "./plugins/claude-harness",
+      "description": "claude-harness - 12 specialized agents for state-machine driven development",
+      "version": "1.0.0"
+    }
+  ]
+}

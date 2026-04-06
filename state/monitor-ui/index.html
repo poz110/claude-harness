@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .state-past { background: #16a34a; }
+    .state-current { background: #2563eb; box-shadow: 0 0 0 2px #60a5fa; }
+    .state-future { background: #374151; }
+    .manual-node { color: #fbbf24; }
+    .auto-node { color: #9ca3af; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .doc-item:hover { background: #374151; }
+    #doc-modal { backdrop-filter: blur(4px); }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+  <div class="container mx-auto p-6 max-w-6xl">
+    <!-- 標題 -->
+    <header class="mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <span>📊</span>
+          <span>Workflow Monitor</span>
+        </h1>
+        <p class="text-gray-400 mt-1" id="current-state-text">載入中...</p>
+      </div>
+      <div class="text-right">
+        <div class="text-sm text-gray-500">WebSocket</div>
+        <div id="ws-status" class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+          <span class="text-sm">連接中...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主要內容 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- 左側：狀態流程圖 -->
+      <div class="lg:col-span-2">
+        <div class="bg-gray-800 rounded-lg p-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>🔄</span> 狀態流程
+          </h2>
+          <div id="states-container" class="space-y-1">
+            <!-- 動態生成 -->
+          </div>
+        </div>
+
+        <!-- 耗時統計 -->
+        <div class="grid grid-cols-3 gap-4 mt-6">
+          <div class="bg-gray-800 p-4 rounded-lg">
+            <h3 class="text-sm font-medium text-gray-400">總耗時</h3>
+            <p class="text-2xl font-bold text-blue-400" id="total-duration">--</p>
+          </div>
+          <div class="bg-gray-800 p-4 rounded-lg">
+            <h3 class="text-sm font-medium text-gray-400">當前階段耗時</h3>
+            <p class="text-2xl font-bold text-green-400" id="current-duration">--</p>
+          </div>
+          <div class="bg-gray-800 p-4 rounded-lg">
+            <h3 class="text-sm font-medium text-gray-400">狀態變更次數</h3>
+            <p class="text-2xl font-bold text-purple-400" id="change-count">--</p>
+          </div>
+        </div>
+
+        <!-- 歷史記錄 -->
+        <div class="bg-gray-800 rounded-lg p-6 mt-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>📜</span> 歷史記錄
+          </h2>
+          <div id="history-container" class="max-h-64 overflow-y-auto space-y-2 text-sm">
+            <!-- 動態生成 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 右側：產物文檔 -->
+      <div class="lg:col-span-1">
+        <div class="bg-gray-800 rounded-lg p-6 sticky top-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>📁</span> 產物文檔
+          </h2>
+          <div id="docs-container" class="space-y-2">
+            <!-- 動態生成 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 文檔查看模態框 -->
+  <div id="doc-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-lg max-w-4xl w-full mx-4 max-h-[80vh] flex flex-col">
+      <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+        <h3 id="doc-modal-title" class="font-semibold">文檔內容</h3>
+        <button onclick="closeDocModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="p-4 overflow-auto flex-1">
+        <pre id="doc-modal-content" class="text-sm text-gray-300 whitespace-pre-wrap font-mono"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // WebSocket 連接
+    let ws = null
+    let stateData = null
+    let config = null
+    let currentDurationInterval = null
+
+    // 格式化耗時
+    function formatDuration(ms) {
+      if (!ms) return '--'
+      const seconds = Math.floor(ms / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const hours = Math.floor(minutes / 60)
+
+      if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`
+      if (minutes > 0) return `${minutes}m ${seconds % 60}s`
+      return `${seconds}s`
+    }
+
+    // 格式化時間
+    function formatTime(isoString) {
+      const date = new Date(isoString)
+      return date.toLocaleString('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    }
+
+    // 更新 WebSocket 狀態
+    function updateWsStatus(connected) {
+      const el = document.getElementById('ws-status')
+      if (connected) {
+        el.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-sm text-green-400">已連接</span>'
+      } else {
+        el.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span><span class="text-sm text-red-400">已斷開</span>'
+      }
+    }
+
+    // 渲染狀態流程
+    function renderStates() {
+      const container = document.getElementById('states-container')
+      if (!config || !stateData) return
+
+      const states = Object.keys(config.STATES)
+      const current = stateData.state?.currentState || 'IDEA'
+
+      container.innerHTML = states.map((s, i) => {
+        const stateConfig = config.STATES[s]
+        const transition = config.TRANSITIONS[s]
+        const isPast = states.indexOf(current) > i
+        const isCurrent = s === current
+        const isManual = stateConfig.manual
+        const duration = stateData.durations?.[s]
+
+        let bgClass = 'state-future'
+        if (isCurrent) bgClass = 'state-current pulse'
+        else if (isPast) bgClass = 'state-past'
+
+        const nodeType = isManual ? '👤' : '🤖'
+        const nodeClass = isManual ? 'manual-node' : 'auto-node'
+
+        return `
+          <div class="flex items-center group">
+            <div class="w-28 text-right pr-3 text-xs ${nodeClass} shrink-0">
+              ${nodeType} ${s}
+            </div>
+            <div class="flex-1 h-9 ${bgClass} rounded flex items-center px-3 text-sm cursor-pointer hover:opacity-90 transition-opacity"
+                 onclick="showStateDocs('${s}')">
+              <span class="truncate">${stateConfig.desc}</span>
+              ${duration ? `<span class="ml-auto text-xs opacity-70 shrink-0">${formatDuration(duration)}</span>` : ''}
+              ${isCurrent ? '<span class="ml-2 text-xs">◀</span>' : ''}
+            </div>
+          </div>
+        `
+      }).join('')
+    }
+
+    // 更新統計
+    function updateStats() {
+      if (!stateData) return
+
+      document.getElementById('current-state-text').textContent =
+        `當前狀態：${stateData.state?.currentState || 'IDEA'} — ${config?.STATES[stateData.state?.currentState]?.desc || ''}`
+
+      document.getElementById('total-duration').textContent =
+        formatDuration(stateData.totalDuration)
+
+      document.getElementById('current-duration').textContent =
+        formatDuration(stateData.durations?.[stateData.state?.currentState])
+
+      document.getElementById('change-count').textContent =
+        (stateData.state?.history?.length || 0).toString()
+
+      // 渲染歷史記錄
+      const historyContainer = document.getElementById('history-container')
+      const history = stateData.state?.history || []
+
+      historyContainer.innerHTML = history.slice(-20).reverse().map(entry => `
+        <div class="flex items-center gap-2 p-2 bg-gray-700/50 rounded">
+          <span class="text-gray-500 text-xs shrink-0">${formatTime(entry.timestamp)}</span>
+          <span class="text-blue-400">${entry.from}</span>
+          <span class="text-gray-500">→</span>
+          <span class="text-green-400">${entry.to}</span>
+          ${entry.agent ? `<span class="text-gray-500 text-xs ml-auto">[${entry.agent}]</span>` : ''}
+        </div>
+      `).join('')
+    }
+
+    // 加載文檔列表
+    async function loadDocs() {
+      try {
+        const res = await fetch('/api/docs')
+        const docs = await res.json()
+
+        const container = document.getElementById('docs-container')
+        container.innerHTML = docs.map(doc => `
+          <div class="doc-item p-3 rounded cursor-pointer transition-colors"
+               onclick="showDoc('${doc.path}')">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">${doc.icon}</span>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">${doc.name}</div>
+                <div class="text-xs text-gray-500">${doc.path}</div>
+              </div>
+            </div>
+          </div>
+        `).join('')
+      } catch (e) {
+        console.error('加載文檔列表失敗:', e)
+      }
+    }
+
+    // 顯示文檔
+    async function showDoc(docPath) {
+      try {
+        const res = await fetch(`/api/doc/${encodeURIComponent(docPath)}`)
+        const content = await res.text()
+
+        document.getElementById('doc-modal-title').textContent = docPath
+        document.getElementById('doc-modal-content').textContent = content || '(空文件或不存在)'
+        document.getElementById('doc-modal').classList.remove('hidden')
+        document.getElementById('doc-modal').classList.add('flex')
+      } catch (e) {
+        alert('加載文檔失敗: ' + e.message)
+      }
+    }
+
+    // 顯示狀態相關文檔
+    function showStateDocs(state) {
+      const docs = config?.ARTIFACT_DOCS?.[state] || []
+      if (docs.length === 0) {
+        alert(`${state} 階段沒有產物文檔`)
+        return
+      }
+
+      // 顯示第一個文檔
+      showDoc(docs[0])
+    }
+
+    // 關閉模態框
+    function closeDocModal() {
+      document.getElementById('doc-modal').classList.add('hidden')
+      document.getElementById('doc-modal').classList.remove('flex')
+    }
+
+    // 初始化 WebSocket
+    function initWebSocket() {
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      ws = new WebSocket(`${wsProtocol}//${location.host}`)
+
+      ws.onopen = () => {
+        updateWsStatus(true)
+        console.log('WebSocket 已連接')
+      }
+
+      ws.onclose = () => {
+        updateWsStatus(false)
+        console.log('WebSocket 已斷開，5秒後重連...')
+        setTimeout(initWebSocket, 5000)
+      }
+
+      ws.onerror = (err) => {
+        console.error('WebSocket 錯誤:', err)
+      }
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        if (data.type === 'initial-state' || data.type === 'state-update') {
+          stateData = data
+          renderStates()
+          updateStats()
+        }
+      }
+    }
+
+    // 初始化
+    async function init() {
+      try {
+        const res = await fetch('/api/state')
+        const data = await res.json()
+        stateData = data
+        config = data.config
+        renderStates()
+        updateStats()
+        loadDocs()
+        initWebSocket()
+      } catch (e) {
+        console.error('初始化失敗:', e)
+        document.getElementById('current-state-text').textContent = '載入失敗: ' + e.message
+      }
+    }
+
+    // 啟動當前階段耗時計時器
+    setInterval(() => {
+      if (stateData?.state?.currentState && stateData.durations) {
+        const current = stateData.state.currentState
+        const startTime = stateData.state.updatedAt || stateData.state.createdAt
+        if (startTime) {
+          const elapsed = Date.now() - new Date(startTime).getTime()
+          document.getElementById('current-duration').textContent = formatDuration(elapsed)
+        }
+      }
+    }, 1000)
+
+    // 點擊模態框外部關閉
+    document.getElementById('doc-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'doc-modal') {
+        closeDocModal()
+      }
+    })
+
+    // ESC 關閉模態框
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDocModal()
+      }
+    })
+
+    init()
+  </script>
+</body>
+</html>

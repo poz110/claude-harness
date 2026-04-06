@@ -1,0 +1,52 @@
+{
+  "name": "claude-harness",
+  "description": "claude-harness - A state machine driven development workflow with 12 specialized agents (PM, Architect, Designer, FullStack, Reviewer, QA, Security, DevOps, etc.)",
+  "version": "1.0.0",
+  "author": {
+    "name": "Snow.Li"
+  },
+  "agents": [
+    "agents/orchestrator.md",
+    "agents/pm.md",
+    "agents/architect.md",
+    "agents/designer.md",
+    "agents/fullstack.md",
+    "agents/reviewer.md",
+    "agents/qa.md",
+    "agents/security-auditor.md",
+    "agents/devops.md",
+    "agents/general.md",
+    "agents/be.md",
+    "agents/fe.md",
+    "agents/plan-ceo-review.md",
+    "agents/_shared.md"
+  ],
+  "skills": [
+    "skills/init/SKILL.md",
+    "skills/generate-prd/SKILL.md",
+    "skills/generate-design/SKILL.md",
+    "skills/implement-api/SKILL.md",
+    "skills/implement-feature/SKILL.md",
+    "skills/code-review-arch/SKILL.md",
+    "skills/arch-review/SKILL.md",
+    "skills/owasp-scan/SKILL.md",
+    "skills/prepare-tests/SKILL.md",
+    "skills/setup-cicd/SKILL.md",
+    "skills/stitch-design/SKILL.md",
+    "skills/interaction-spec/SKILL.md",
+    "skills/traceability-matrix/SKILL.md",
+    "skills/env-check/SKILL.md",
+    "skills/autopilot/SKILL.md",
+    "skills/hotfix/SKILL.md",
+    "skills/systematic-debugging/SKILL.md",
+    "skills/writing-skills/SKILL.md",
+    "skills/monitor/SKILL.md"
+  ],
+  "hooks": [
+    "settings.json"
+  ],
+  "bin": {
+    "workflow": "scripts/workflow.js",
+    "harness-init": "scripts/workflow.js init"
+  }
+}
