@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-post-compact"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-post-compact"
           }
         ]
       },
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/workflow.js && node scripts/workflow.js status"
+            "command": "_w=scripts/workflow.js; test -f \"$_w\" || _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1); test -f \"$_w\" && HARNESS_ROOT=$PWD node \"$_w\" status"
           }
         ]
       },
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-session-meta-rules"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-session-meta-rules"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-post-write"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-post-write"
           }
         ]
       },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-post-write"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-post-write"
           }
         ]
       },
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-post-bash"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-post-bash"
           }
         ]
       },
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-post-read"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-post-read"
           }
         ]
       }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-pre-write"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-pre-write"
           }
         ]
       },
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-pre-bash"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-pre-bash"
           }
         ]
       }
@@ -93,7 +93,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f scripts/lib/hooks.js && node scripts/lib/hooks.js hook-stop"
+            "command": "_h=scripts/lib/hooks.js; test -f \"$_h\" || _h=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/lib/hooks.js 2>/dev/null|tail -1); test -f \"$_h\" && HARNESS_ROOT=$PWD node \"$_h\" hook-stop"
           }
         ]
       }

@@ -22,7 +22,7 @@ const crypto = require('crypto')
 const { SCHEMA_VERSION, CONTEXT_BUDGET, TRACKED_ARTIFACT_FILES } = require('./config.js')
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
-const ROOT              = path.join(__dirname, '../..')
+const ROOT              = process.env.HARNESS_ROOT || path.join(__dirname, '../..')
 const STATE_FILE        = path.join(ROOT, 'state', 'workflow-state.json')
 const STATE_DIR         = path.join(ROOT, 'state')
 const AGENT_LOG         = path.join(ROOT, 'state', 'agent-log.jsonl')
