@@ -244,6 +244,30 @@ Client          API           Auth         DB          MQ
 
 加载 `.claude/skills/arch-review/SKILL.md` 获取最新技术栈参考。
 
+**开工前：扫描现有项目技术栈（存量项目必须执行）**
+
+在填写选型表之前，先检测项目是否已有代码：
+
+```bash
+# 检测现有技术栈
+if [ -f "package.json" ]; then
+  node -e "
+    const p = require('./package.json')
+    const d = {...(p.dependencies||{}), ...(p.devDependencies||{})}
+    console.log('FE框架:', d.next?'Next.js': d.vue?'Vue': d.react?'React(SPA)': 'unknown')
+    console.log('CSS:', d.tailwindcss?'Tailwind': d.antd?'Ant Design': d['@mui/material']?'MUI': d['styled-components']?'styled-components': 'unknown')
+    console.log('构建:', d['react-scripts']?'CRA/Webpack': d.vite?'Vite': d.webpack?'Webpack': 'unknown')
+    console.log('BE框架:', d.express?'Express': d.fastify?'Fastify': d.hono?'Hono': d.koa?'Koa': 'none/separate')
+  " 2>/dev/null || true
+fi
+SRC_FILES=$(find src app pages components -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" 2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
+echo "现有源文件数: ${SRC_FILES}"
+```
+
+**规则**：
+- `SRC_FILES > 20`（存量项目）→ 选型表以**检测到的现有栈**为基础，不得强行替换为 Bun/Next.js；在 ADR 明确写入"项目现有技术栈"节
+- `SRC_FILES ≤ 20`（全新项目）→ 自由选型，默认推荐 Bun + Hono + Next.js
+
 每个选型必须填写完整表格：
 
 | 层级 | 选型 | 版本 | 选择理由 | 放弃的方案 | 放弃原因 |

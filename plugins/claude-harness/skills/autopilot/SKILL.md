@@ -206,14 +206,20 @@ Prompt:
 "
 你是 UX Designer，負責設計系統和視覺規範。
 
-前置：Read docs/prd.md, docs/arch-decision.md
+前置（按順序）：
+1. 執行 designer.md 模式 0 Step 0 — 檢測現有設計系統（組件庫 / theme 文件 / CSS 變量）
+2. Read docs/prd.md, docs/arch-decision.md
+3. 根據模式 0 結論路由：
+   - 存量項目（SRC_FILES > 20 或檢測到組件庫）→ 路徑 A：文檔化現有設計系統
+   - 全新項目 → 路徑 B：競品研究 + 設計方向提案
 
 目標：
-1. 產出 DESIGN.md（設計系統）
-2. 產出 docs/design-spec.md（80 項審計 ≥40/80）
+1. 產出 DESIGN.md（存量項目：文檔化現有系統；全新項目：全新設計系統）
+2. 產出 docs/design-spec.md（80 項審計 ≥40/80；存量項目組件規範基於已有組件庫）
 3. 直接編寫 HTML/CSS 設計稿（不調用 Stitch MCP，由 Designer 自行實現）
    - 為 design-spec.md 中每個頁面生成 design/{page-slug}/desktop.html
    - 生成 design/index.html 作為設計稿入口
+   - 存量項目：設計稿視覺風格須與現有組件庫一致
 
 [注意] 不使用任何 MCP 工具生成設計稿，完全由 Designer 自行用 HTML/CSS/內聯樣式編寫，確保真實體現設計系統視覺規範。
 
@@ -282,12 +288,17 @@ Prompt:
 "
 你是 Full-Stack Engineer，負責 API 先行 → BE → FE 全棧實現。
 
-前置：Read docs/traceability-matrix.md, docs/design-spec.md, DESIGN.md
+前置（按順序讀取）：
+1. docs/arch-decision.md  → 技術棧決策（存量項目在此確認現有框架）
+2. docs/traceability-matrix.md
+3. docs/design-spec.md（如存在）
+4. DESIGN.md（如存在）
+5. 項目根目錄 package.json / requirements.txt → 確認現有依賴
 
 目標：
 1. 寫 docs/api-spec.md（API 先行）
-2. 實現 BE（Bun + Hono + Drizzle）
-3. 實現 FE（Next.js + React + shadcn）
+2. 實現 BE（按 docs/arch-decision.md 技術棧；若無 ADR 或全新項目則用 Bun + Hono + Drizzle）
+3. 實現 FE（按 docs/arch-decision.md 技術棧；若無 ADR 或全新項目則用 Next.js + React + shadcn）
 4. 更新追溯矩陣所有 Must 為 ✅
 
 完成後執行：

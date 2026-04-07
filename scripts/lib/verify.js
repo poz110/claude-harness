@@ -93,7 +93,14 @@ async function fullVerify(role) {
   const config = dynOut[role] || CODE_OUTPUTS[role]
   if (!config) { console.error(`Unknown role: ${role}`); process.exit(1) }
   const fullDir = path.join(ROOT, config.dir)
-  if (!fs.existsSync(fullDir)) { console.error(`❌ ${config.dir} 目录不存在`); return { ok: false } }
+  if (!fs.existsSync(fullDir)) {
+    if (role === 'FE') {
+      console.log(`  ⚠️  前端目录不存在（${config.dir}/），跳过 FE 验证（后端专用项目？）`)
+      return { ok: true, reason: 'skip (no FE directory)' }
+    }
+    console.error(`❌ ${config.dir} 目录不存在`)
+    return { ok: false }
+  }
   console.log(`\n🔨 验证 ${role} (${config.dir})\n`)
   const stepResults = []
   for (const step of config.verifySteps) {
@@ -182,16 +189,35 @@ function runIntegrationCheck() {
     console.log(`    ❌ ${feDir}/ 不存在`)
   }
 
-  // [2/6] API client
+  // [2/6] API client (monorepo tRPC paths + single-repo common patterns)
   console.log('  [2/6] 检查 API 客户端...')
-  const clientFiles = [`${feDir}/lib/trpc.ts`, `${feDir}/lib/trpc/client.ts`, `${feDir}/lib/api.ts`, `${feDir}/src/lib/api.ts`]
+  const clientFiles = [
+    // monorepo / Next.js tRPC paths
+    `${feDir}/lib/trpc.ts`, `${feDir}/lib/trpc/client.ts`,
+    `${feDir}/lib/api.ts`, `${feDir}/src/lib/api.ts`,
+    // single-repo: common request utility patterns
+    `${feDir}/src/utils/request.ts`, `${feDir}/src/utils/request.js`,
+    `${feDir}/src/utils/http.ts`,    `${feDir}/src/utils/http.js`,
+    `${feDir}/src/utils/api.ts`,     `${feDir}/src/utils/api.js`,
+    `${feDir}/src/services/index.ts`, `${feDir}/src/services/index.js`,
+    `${feDir}/src/api/index.ts`,      `${feDir}/src/api/index.js`,
+    `${feDir}/src/api.ts`,            `${feDir}/src/api.js`,
+    // root-level single-repo
+    `src/utils/request.ts`, `src/utils/request.js`,
+    `src/utils/http.ts`,    `src/utils/http.js`,
+    `src/api/index.ts`,     `src/api/index.js`,
+  ]
   const foundClient = clientFiles.find(f => {
     const full = path.join(ROOT, f)
     return fs.existsSync(full) && fs.readFileSync(full, 'utf8').trim().length > 50
   })
-  results.push({ check: 'API 客户端', ok: !!foundClient, detail: foundClient || '未找到' })
-  console.log(`    ${foundClient ? '✅' : '❌'} ${results[results.length - 1].detail}`)
-  if (!foundClient) allPassed = false
+  results.push({ check: 'API 客户端', ok: !!foundClient, detail: foundClient || '未找到（可能是单仓库，路径不在预设列表中）' })
+  console.log(`    ${foundClient ? '✅' : '⚠️ '} ${results[results.length - 1].detail}`)
+  // API client missing is a warning for single-repo projects, not a hard block
+  if (!foundClient) {
+    results[results.length - 1].ok = true // degrade to warning
+    console.log('    ⚠️  单仓库项目可能使用了其他 API 请求方式，手动确认')
+  }
 
   // [3/6] Backend routes
   console.log('  [3/6] 检查后端路由...')
@@ -257,39 +283,58 @@ function runIntegrationCheck() {
   console.log('  [7/9] 检查 Tailwind 配置...')
   const twConfigPaths = [`${feDir}/tailwind.config.ts`, `${feDir}/tailwind.config.js`]
   const twConfig = twConfigPaths.find(p => fs.existsSync(path.join(ROOT, p)))
+  // Detect whether project actually uses Tailwind (config file OR package.json dep)
+  const usesTailwind = !!twConfig || (() => {
+    try {
+      for (const pkgPath of [path.join(ROOT, feDir, 'package.json'), path.join(ROOT, 'package.json')]) {
+        if (!fs.existsSync(pkgPath)) continue
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkg.dependencies?.tailwindcss || pkg.devDependencies?.tailwindcss) return true
+      }
+    } catch {}
+    return false
+  })()
   if (twConfig) {
     const twContent = fs.readFileSync(path.join(ROOT, twConfig), 'utf8')
     const hasContentPaths = /content\s*[:=][\s\S]{0,200}(app\/|src\/|components\/)/.test(twContent)
     results.push({ check: 'Tailwind content 路径', ok: hasContentPaths, detail: hasContentPaths ? '已配置' : 'content 数组未覆盖 app/ 或 src/' })
     console.log(`    ${hasContentPaths ? '✅' : '❌'} ${results[results.length - 1].detail}`)
     if (!hasContentPaths) allPassed = false
-  } else {
+  } else if (usesTailwind) {
     results.push({ check: 'Tailwind content 路径', ok: true, detail: '无 tailwind.config（Tailwind v4 @import 模式）' })
     console.log('    ⚠️  未找到 tailwind.config，跳过（Tailwind v4）')
+  } else {
+    results.push({ check: 'Tailwind content 路径', ok: true, detail: '项目未使用 Tailwind，跳过' })
+    console.log('    ⚠️  项目未使用 Tailwind，跳过')
   }
 
-  // [8/9] CSS import chain
+  // [8/9] CSS import chain — only relevant for Tailwind projects
   console.log('  [8/9] 检查 globals.css 导入链...')
-  const globalsCssCandidates = [
-    `${feDir}/app/globals.css`, `${feDir}/src/app/globals.css`,
-    `${feDir}/src/styles/globals.css`, `${feDir}/styles/globals.css`,
-  ]
-  const globalsFile = globalsCssCandidates.find(p => fs.existsSync(path.join(ROOT, p)))
-  if (globalsFile) {
-    const cssContent = fs.readFileSync(path.join(ROOT, globalsFile), 'utf8')
-    const hasTailwind = /@tailwind base|@import\s+["']tailwindcss["']/.test(cssContent)
-    const tokenFile = path.join(ROOT, 'design/design-tokens.css')
-    const hasTokenImport = !fs.existsSync(tokenFile) || /design-tokens|@import.*token/i.test(cssContent)
-    const cssOk = hasTailwind && hasTokenImport
-    const detail = !hasTailwind ? 'globals.css 缺少 Tailwind 导入' :
-      !hasTokenImport ? 'globals.css 未导入 design-tokens.css（设计 token 会失效）' : '完整'
-    results.push({ check: 'CSS 导入链', ok: cssOk, detail })
-    console.log(`    ${cssOk ? '✅' : '❌'} ${detail}`)
-    if (!cssOk) allPassed = false
+  if (!usesTailwind) {
+    results.push({ check: 'CSS 导入链', ok: true, detail: '项目未使用 Tailwind，跳过' })
+    console.log('    ⚠️  项目未使用 Tailwind，跳过')
   } else {
-    results.push({ check: 'CSS 导入链', ok: false, detail: '未找到 globals.css' })
-    allPassed = false
-    console.log('    ❌ 未找到 globals.css')
+    const globalsCssCandidates = [
+      `${feDir}/app/globals.css`, `${feDir}/src/app/globals.css`,
+      `${feDir}/src/styles/globals.css`, `${feDir}/styles/globals.css`,
+    ]
+    const globalsFile = globalsCssCandidates.find(p => fs.existsSync(path.join(ROOT, p)))
+    if (globalsFile) {
+      const cssContent = fs.readFileSync(path.join(ROOT, globalsFile), 'utf8')
+      const hasTailwind = /@tailwind base|@import\s+["']tailwindcss["']/.test(cssContent)
+      const tokenFile = path.join(ROOT, 'design/design-tokens.css')
+      const hasTokenImport = !fs.existsSync(tokenFile) || /design-tokens|@import.*token/i.test(cssContent)
+      const cssOk = hasTailwind && hasTokenImport
+      const detail = !hasTailwind ? 'globals.css 缺少 Tailwind 导入' :
+        !hasTokenImport ? 'globals.css 未导入 design-tokens.css（设计 token 会失效）' : '完整'
+      results.push({ check: 'CSS 导入链', ok: cssOk, detail })
+      console.log(`    ${cssOk ? '✅' : '❌'} ${detail}`)
+      if (!cssOk) allPassed = false
+    } else {
+      results.push({ check: 'CSS 导入链', ok: false, detail: '未找到 globals.css' })
+      allPassed = false
+      console.log('    ❌ 未找到 globals.css')
+    }
   }
 
   // [9/9] Package.json scripts
@@ -302,13 +347,29 @@ function runIntegrationCheck() {
       return { ok: missing.length === 0, missing }
     } catch { return { ok: false, missing: ['package.json 解析失败'] } }
   }
-  const feScriptsCheck = checkScripts(path.join(ROOT, feDir, 'package.json'), ['dev', 'build'])
-  const beScriptsCheck = checkScripts(path.join(ROOT, beDir, 'package.json'), ['dev', 'build'])
-  const scriptsOk = feScriptsCheck.ok && beScriptsCheck.ok
-  const scriptsMissing = [
-    ...(feScriptsCheck.missing.length ? [`FE 缺少: ${feScriptsCheck.missing.join(', ')}`] : []),
-    ...(beScriptsCheck.missing.length ? [`BE 缺少: ${beScriptsCheck.missing.join(', ')}`] : []),
-  ]
+  const feExists = fs.existsSync(path.join(ROOT, feDir))
+  const beExists = fs.existsSync(path.join(ROOT, beDir))
+  const rootPkgPath = path.join(ROOT, 'package.json')
+  let scriptsOk, scriptsMissing
+  if (!feExists && !beExists && fs.existsSync(rootPkgPath)) {
+    // Single-repo: check root package.json for at least dev or start
+    const rootCheck = checkScripts(rootPkgPath, ['dev', 'build'])
+    scriptsOk = rootCheck.ok
+    scriptsMissing = rootCheck.missing.length ? [`根目录 缺少: ${rootCheck.missing.join(', ')}`] : []
+    console.log(`    ⚠️  单仓库模式，检查根目录 package.json`)
+  } else {
+    const feScriptsCheck = feExists
+      ? checkScripts(path.join(ROOT, feDir, 'package.json'), ['dev', 'build'])
+      : { ok: true, missing: [] }
+    const beScriptsCheck = beExists
+      ? checkScripts(path.join(ROOT, beDir, 'package.json'), ['dev', 'build'])
+      : { ok: true, missing: [] }
+    scriptsOk = feScriptsCheck.ok && beScriptsCheck.ok
+    scriptsMissing = [
+      ...(feScriptsCheck.missing.length ? [`FE 缺少: ${feScriptsCheck.missing.join(', ')}`] : []),
+      ...(beScriptsCheck.missing.length ? [`BE 缺少: ${beScriptsCheck.missing.join(', ')}`] : []),
+    ]
+  }
   results.push({ check: 'package scripts', ok: scriptsOk, detail: scriptsOk ? '完整' : scriptsMissing.join('; ') })
   console.log(`    ${scriptsOk ? '✅' : '❌'} ${results[results.length - 1].detail}`)
   if (!scriptsOk) allPassed = false
@@ -338,16 +399,24 @@ function _httpGet(url, timeoutMs = 3000) {
  */
 async function runSmokeTest() {
   console.log('\n🔥 BE 启动 Smoke Test\n')
-  const serverDir = path.join(ROOT, 'apps/server')
+  const state    = loadState()
+  const dynOut   = resolveCodeOutputs(state)
+  const beDir    = dynOut.BE?.dir || 'apps/server'
+  const serverDir = path.join(ROOT, beDir)
   if (!fs.existsSync(serverDir)) {
-    console.log('  ❌ apps/server 不存在，跳过')
-    return { ok: false, reason: 'apps/server 不存在' }
+    console.log(`  ❌ ${beDir}/ 不存在，跳过 smoke test（无后端？）`)
+    return { ok: false, reason: `${beDir}/ 不存在` }
   }
 
   // ── Determine port ──────────────────────────────────────────────────────────
   let port = 3001
-  for (const ef of ['.env', '.env.local', 'apps/server/.env', 'apps/server/.env.local']) {
-    const fp = path.join(ROOT, ef)
+  const envFiles = [
+    path.join(ROOT, '.env'), path.join(ROOT, '.env.local'),
+    path.join(serverDir, '.env'), path.join(serverDir, '.env.local'),
+    path.join(ROOT, 'server/.env'), path.join(ROOT, 'server/.env.local'),
+    path.join(ROOT, 'backend/.env'), path.join(ROOT, 'backend/.env.local'),
+  ]
+  for (const fp of envFiles) {
     if (!fs.existsSync(fp)) continue
     const m = fs.readFileSync(fp, 'utf8').match(/^PORT\s*=\s*(\d+)/m)
     if (m) { port = parseInt(m[1]); break }

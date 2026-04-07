@@ -61,6 +61,44 @@ grep -q "\.worktrees" .gitignore 2>/dev/null || echo ".worktrees/" >> .gitignore
 
 ---
 
+## 开工前：项目类型检测（环境检测之前执行）
+
+**先判断是全新项目还是存量改造，这决定技术栈选择和实现策略。**
+
+```bash
+echo "=== 项目类型检测 ==="
+
+# 检测现有技术栈
+if [ -f "package.json" ]; then
+  node -e "
+    const p = require('./package.json')
+    const d = {...(p.dependencies||{}), ...(p.devDependencies||{})}
+    console.log('FE框架 :', d.next?'Next.js': d.vue?'Vue': d.react?'React(SPA/CRA/Vite)': 'unknown')
+    console.log('CSS方案 :', d.tailwindcss?'Tailwind': d.antd?'Ant Design': d['@mui/material']?'MUI': d['styled-components']?'styled-components': 'unknown')
+    console.log('构建工具:', d['react-scripts']?'CRA/Webpack': d.vite?'Vite': d.webpack?'Webpack': 'unknown')
+    console.log('包管理器:', require('fs').existsSync('bun.lockb')||require('fs').existsSync('bun.lock')?'Bun': require('fs').existsSync('yarn.lock')?'Yarn': 'npm/Node')
+  " 2>/dev/null || echo "(无 package.json 或解析失败)"
+fi
+
+# 估算存量代码量
+SRC_FILES=$(find src app pages components -maxdepth 6 \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) 2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
+echo "现有源文件数: ${SRC_FILES}"
+
+if [ "${SRC_FILES:-0}" -gt 20 ]; then
+  echo ""
+  echo "📦 存量项目 — 实现规则："
+  echo "   1. 必须按检测到的现有栈实现，不引入新框架/运行时"
+  echo "   2. docs/arch-decision.md 中的技术栈节是最终依据"
+  echo "   3. 组件风格、目录结构、命名方式须与现有代码一致"
+  echo "   4. 忽略本 Agent 默认的 Bun/Next.js/shadcn 示例代码"
+else
+  echo ""
+  echo "🌱 全新项目 — 按 docs/arch-decision.md 技术栈实现（默认 Next.js + Bun + Hono）"
+fi
+```
+
+---
+
 ## 开工前：环境检测（最先执行，不跳过）
 
 加载并执行：`.claude/skills/env-check/SKILL.md` → **模块 B + C**（BE + FE 同时检测）
@@ -310,11 +348,32 @@ node scripts/workflow.js validate-doc api-spec
 # 3. BE 构建 + lint + 类型检查（类型错误阻塞，不可跳过）
 node scripts/workflow.js verify-code BE
 
-# 4. FE 构建 + lint + 类型检查（类型错误阻塞，不可跳过）
-node scripts/workflow.js verify-code FE
+# 检测是否有前端（决定后续步骤是否执行）
+HAS_FE=false
+for _dir in apps/web client frontend src/public src/client; do
+  [ -d "$_dir" ] && [ -f "$_dir/package.json" ] && HAS_FE=true && break
+done
 
-# 5. 联调静态检查（mock / API 客户端 / 路由 / env / Tailwind 配置 / CSS 导入链 / package scripts）
-node scripts/workflow.js integration-check
+if [ "$HAS_FE" = true ]; then
+  # 4a. FE 构建 + lint + 类型检查（类型错误阻塞，不可跳过）
+  node scripts/workflow.js verify-code FE
+
+  # 5a. 联调静态检查（含 FE 侧 mock / API 客户端 / Tailwind / CSS）
+  node scripts/workflow.js integration-check
+else
+  echo ""
+  echo "⚠️  未检测到前端（后端专用项目），跳过 FE 验证和联调检查"
+  echo "   后端项目联调检查：验证 API 端点实现与 docs/api-spec.md 一致"
+
+  # 5b. 仅后端联调检查
+  echo "   检查 API 端点..."
+  if grep -q "GET\|POST\|PUT\|DELETE\|PATCH" docs/api-spec.md; then
+    echo "   ✅ API spec 端点已定义"
+  else
+    echo "   ❌ docs/api-spec.md 未定义任何端点"
+    exit 1
+  fi
+fi
 
 # 6. BE 启动 Smoke Test（实际启动 dev server，验证 /health 返回 2xx）
 #    ‼️ 如果失败：查看输出中的服务器日志，修复后重跑此步骤
@@ -344,8 +403,8 @@ node scripts/workflow.js advance
 
 **质量门控全通过**
 - [ ] `verify-code BE` ✅（含类型检查，非可选）
-- [ ] `verify-code FE` ✅（含类型检查，非可选）
-- [ ] `integration-check` ✅（含 Tailwind 配置、CSS 导入链、package scripts）
+- [ ] `verify-code FE` ✅（有前端时；无前端时跳过）
+- [ ] `integration-check` ✅（有前端时执行；后端专用项目仅验证 api-spec 端点）
 - [ ] `smoke-test` ✅（BE dev server 实际启动并响应 /health）
 
 **API 契约**

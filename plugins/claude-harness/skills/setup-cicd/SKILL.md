@@ -7,7 +7,11 @@ description: >
 
 # Setup CI/CD
 
-## 技术栈
+> **存量项目适配**：以下技术规范是**全新项目的默认推荐**。
+> 若 `docs/arch-decision.md` 或项目已有 CI/CD 配置（如 `.github/workflows/`、`vercel.json`、`Dockerfile`、`k8s/`），
+> 以**现有基础设施**为准，不得强制引入新的部署平台。
+
+## 技术栈（适用于全新项目）
 
 ```
 容器      Docker + Docker Compose（开发）

@@ -267,13 +267,20 @@ check_be_environment() {
 
   # 5. 依赖安装检测
   echo "检测依赖..."
-  if [ -f "apps/server/package.json" ]; then
-    if [ ! -d "apps/server/node_modules" ]; then
-      echo "  ❌ apps/server 依赖未安装"
-      issues+=("DEPS_NOT_INSTALLED:apps/server/node_modules 不存在")
+  # 支持 monorepo（apps/server） + 单仓库（根目录 / server/）
+  BE_PKG=$(find . -maxdepth 3 -name "package.json" \
+    \( -path "*/apps/server/package.json" -o -path "*/server/package.json" -o -path "*/backend/package.json" -o -path "./server/package.json" -o -path "./backend/package.json" \) \
+    -not -path "*/node_modules/*" 2>/dev/null | head -1)
+  if [ -n "$BE_PKG" ]; then
+    BE_DIR=$(dirname "$BE_PKG")
+    if [ ! -d "${BE_DIR}/node_modules" ]; then
+      echo "  ❌ 后端依赖未安装（${BE_DIR}/）"
+      issues+=("DEPS_NOT_INSTALLED:${BE_DIR}/node_modules 不存在")
     else
-      echo "  ✅ apps/server 依赖已安装"
+      echo "  ✅ 后端依赖已安装（${BE_DIR}/）"
     fi
+  else
+    echo "  ⚠️  未检测到后端 package.json（单仓库或无独立后端）"
   fi
 
   # 汇总结果
@@ -455,13 +462,21 @@ check_fe_environment() {
 
   # 2. FE 依赖
   echo "检测前端依赖..."
-  if [ -f "apps/web/package.json" ]; then
-    if [ ! -d "apps/web/node_modules" ]; then
-      echo "  ❌ apps/web 依赖未安装"
-      issues+=("FE_DEPS_MISSING:apps/web/node_modules 不存在")
+  # 支持 monorepo（apps/web）+ 单仓库（根目录 / client/ / frontend/）
+  FE_PKG=$(find . -maxdepth 3 -name "package.json" \
+    \( -path "*/apps/web/package.json" -o -path "*/client/package.json" -o -path "*/frontend/package.json" \
+       -o -path "./package.json" -o -path "./client/package.json" -o -path "./frontend/package.json" \) \
+    -not -path "*/node_modules/*" 2>/dev/null | head -1)
+  if [ -n "$FE_PKG" ]; then
+    FE_DIR=$(dirname "$FE_PKG")
+    if [ ! -d "${FE_DIR}/node_modules" ]; then
+      echo "  ❌ 前端依赖未安装（${FE_DIR}/）"
+      issues+=("FE_DEPS_MISSING:${FE_DIR}/node_modules 不存在")
     else
-      echo "  ✅ apps/web 依赖已安装"
+      echo "  ✅ 前端依赖已安装（${FE_DIR}/）"
     fi
+  else
+    echo "  ⚠️  未检测到前端 package.json"
   fi
 
   # 3. 设计稿检测
@@ -500,11 +515,20 @@ check_fe_environment() {
   # 5. API 地址配置
   if [ -f "docs/arch-decision.md" ] && grep -qi "trpc\|api" docs/arch-decision.md; then
     echo "检测 API 连接配置..."
-    if [ -f "apps/web/lib/trpc.ts" ] || [ -f "apps/web/lib/api.ts" ]; then
-      echo "  ✅ API 客户端已配置"
+    # 支持 monorepo + 单仓库多种路径模式
+    API_CLIENT=$(find . -maxdepth 5 \
+      \( -path "*/lib/trpc.ts" -o -path "*/lib/trpc/client.ts" \
+         -o -path "*/lib/api.ts" -o -path "*/utils/request.ts" \
+         -o -path "*/utils/http.ts" -o -path "*/utils/api.ts" \
+         -o -path "*/services/index.ts" -o -path "*/api/index.ts" \
+         -o -path "*/src/lib/trpc.ts" -o -path "*/src/utils/request.ts" \
+         -o -path "*/src/api.ts" \) \
+      -not -path "*/node_modules/*" 2>/dev/null | head -1)
+    if [ -n "$API_CLIENT" ]; then
+      echo "  ✅ API 客户端已配置（${API_CLIENT}）"
     else
-      echo "  ❌ API 客户端未创建"
-      issues+=("API_CLIENT_MISSING:apps/web/lib/trpc.ts 或 api.ts 不存在")
+      echo "  ⚠️  API 客户端路径不在预设列表中，手动确认"
+      echo "  （单仓库或使用非标准路径的项目跳过此检查）"
     fi
   fi
 

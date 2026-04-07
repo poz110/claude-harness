@@ -35,7 +35,7 @@ IDEA → PRD_DRAFT* → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW* → DESIGN_PH
 ```bash
 # 推薦：直接傳入需求描述
 /autopilot 構建一個用戶認證系統，支持郵箱註冊、登錄、OAuth登錄
-/autopilot feature 添加用戶頭像上傳功能，支持裁剪和壓縮
+/feature 添加用戶頭像上傳功能，支持裁剪和壓縮   # 增量功能快捷指令
 
 # 命令行方式
 node scripts/workflow.js init-autopilot greenfield "需求描述"  # 全新項目
@@ -51,6 +51,8 @@ node scripts/workflow.js stop-autopilot                       # 停止 autopilot
 **MANUAL 節點自動推進**：啟用後，所有 MANUAL 節點（`PRD_DRAFT`, `CEO_REVIEW`, `DESIGN_PHASE`, `QA_PHASE`, `DEPLOY_PREP`）自動 `--force` 推進，無需用戶確認。
 
 **失敗處理**：Agent 失敗 → 重試 1 次 → 仍失敗則暫停 autopilot，等待用戶介入。
+
+**存量项目适配**：Autopilot 在执行过程中会自动检测目标项目的现有技术栈（package.json 依赖、已有代码量），在 Architect / Designer / Fullstack 阶段自动以现有栈为准，不会强制替换为 Bun/Next.js/shadcn 等默认技术栈。
 
 ## 快速命令
 

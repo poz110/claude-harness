@@ -39,7 +39,87 @@ Designer 的工作不是"让它好看一点"，而是确保产品有真实的设
 
 ---
 
+## 模式 0：存量项目设计扫描（所有模式开工前必须执行）
+
+**在进入任何设计模式之前，先判断项目是否已有设计系统。**
+存量项目的正确做法是"文档化已有系统"，而不是"重新设计一套覆盖它"。
+
+### Step 0：检测现有设计系统
+
+```bash
+echo "=== 设计系统检测 ==="
+
+# 1. 检测组件库
+[ -f package.json ] && node -e "
+  const p = require('./package.json')
+  const d = {...(p.dependencies||{}), ...(p.devDependencies||{})}
+  const libs = []
+  if (d.antd)                  libs.push('Ant Design ' + d.antd)
+  if (d['@ant-design/pro-components']) libs.push('Ant Design Pro')
+  if (d['@mui/material'])      libs.push('MUI ' + d['@mui/material'])
+  if (d['@chakra-ui/react'])   libs.push('Chakra UI')
+  if (d['@mantine/core'])      libs.push('Mantine')
+  if (d['shadcn-ui'] || d['@radix-ui/react-dialog']) libs.push('shadcn/ui + Radix')
+  if (d.tailwindcss)           libs.push('Tailwind CSS ' + d.tailwindcss)
+  if (d.bootstrap)             libs.push('Bootstrap ' + d.bootstrap)
+  if (d['styled-components'])  libs.push('styled-components')
+  if (d['@emotion/react'])     libs.push('Emotion')
+  console.log('组件库:', libs.length ? libs.join(', ') : '未检测到')
+" 2>/dev/null || true
+
+# 2. 扫描 token/theme 文件
+find . -maxdepth 5 \
+  \( -name "theme.js" -o -name "theme.ts" -o -name "theme.css" \
+  -o -name "tokens.css" -o -name "design-tokens*" \
+  -o -name "variables.css" -o -name "vars.css" \
+  -o -name "*antd*theme*" -o -name "*customTheme*" \) \
+  -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null \
+  | head -10 | sed 's/^/  发现: /'
+
+# 3. 统计现有 CSS 变量数量
+CSS_VARS=$(grep -r "^\s*--" --include="*.css" --include="*.scss" --include="*.less" \
+  -l --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null | head -5)
+[ -n "$CSS_VARS" ] && echo "CSS 变量文件: $CSS_VARS" || echo "未发现独立 CSS 变量文件"
+
+# 4. 判断存量规模
+SRC_FILES=$(find src app pages components -maxdepth 6 \
+  \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) \
+  2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
+echo "现有源文件数: ${SRC_FILES:-0}"
+```
+
+### Step 0 结论路由
+
+根据检测结果选择路径：
+
+**路径 A：存量设计系统（SRC_FILES > 20 或检测到组件库）**
+
+→ **跳过模式 1 的竞品研究和设计方向提案**，改为执行以下文档化流程：
+
+```
+1. 读取 package.json → 确认组件库版本和配置
+2. 读取 theme 文件（如 src/theme.js, antd ConfigProvider theme, MUI createTheme...）
+3. 扫描全局 CSS 变量文件，提取已有颜色/间距/字体值
+4. 随机抽取 5-10 个现有组件文件，归纳现有设计模式（命名规范、spacing 用法）
+
+输出 DESIGN.md：
+  - 标注为 "v1.0 · 文档化自现有代码库"
+  - 完整记录现有组件库、主题配置、颜色系统、字体系统
+  - 指出现有系统的缺口（缺少暗色模式？间距不一致？）
+  - 给出新功能应遵循的扩展规则，而不是替换方案
+  
+不得：重新提案颜色、重新选字体、生成与现有系统冲突的 globals.css
+```
+
+**路径 B：全新项目（SRC_FILES ≤ 20 且未检测到组件库）**
+
+→ 按正常模式 1 / 模式 2 执行，从竞品研究开始。
+
+---
+
 ## 模式 1：`/design-system` — 设计系统构建
+
+> ⚠️ **仅适用于路径 B（全新项目）**。存量项目已在模式 0 路径 A 中处理，不再执行本模式。
 
 ### Phase A：竞品研究（不是为了抄，是为了知道规范在哪里）
 
@@ -205,8 +285,10 @@ Designer 的工作不是"让它好看一点"，而是确保产品有真实的设
 ## 模式 2：`/design-spec` — PRD 转设计规范
 
 **前置检查**：
-1. `docs/arch-decision.md` 是否存在 → 必须先读技术约束
-2. `DESIGN.md` 是否存在 → 优先遵守，不存在则先运行 `/design-system`
+1. 执行**模式 0 Step 0** 检测现有设计系统（决定是文档化还是从头设计）
+2. `docs/arch-decision.md` 是否存在 → 必须先读技术约束（含现有组件库信息）
+3. `DESIGN.md` 是否存在 → 优先遵守（路径 A 刚生成的或人工维护的），不存在则先运行模式 0 → 再根据结论路由
+4. **存量项目**：design-spec.md 中的所有组件规范必须基于已检测到的组件库（如 Ant Design），不得指定冲突的新组件库
 
 ### Step 0：从 PRD 提取完整页面清单（最关键，不可跳过）
 
