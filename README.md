@@ -13,8 +13,14 @@
 
 ### 方式一：插件市场安装（推荐）
 
+**1. 添加 marketplace 源**
+
 ```bash
 claude plugin marketplace add poz110/claude-harness
+```
+**2. 安装插件**
+
+```bash
 claude plugin install claude-harness
 ```
 
@@ -33,7 +39,7 @@ claude --dangerously-skip-permissions
 /autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
 ```
 
-> **已安装旧版本？** 运行 `claude plugin update claude-harness` 升级到最新版本，旧版本存在 hook 报错和 `/autopilot` 路径解析问题。
+> **已安装旧版本？** 运行 `claude plugin update claude-harness` 升级到最新版本。
 
 ### 方式二：源码安装
 
