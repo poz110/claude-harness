@@ -429,20 +429,8 @@ function hookStop() {
  * [v1.0] P1.1 改进：同时检查 teams 目录是否存在作为辅助验证
  */
 function checkAgentTeamsEnabled() {
-  // 检查环境变量（settings.json 可传入）
-  const val = process.env[AGENT_TEAMS_CONFIG.ENV_FLAG]
-  if (val === '1' || val === 'true') return true
-
-  // 检查 teams 目录是否存在（辅助验证）
-  const teamsDir = path.join(require('os').homedir(), '.claude', 'teams', AGENT_TEAMS_CONFIG.NATIVE_TEAM_NAME)
-  if (fs.existsSync(teamsDir)) {
-    // 目录存在但环境变量未设置，提示用户
-    console.warn(`⚠️  检测到 ~/.claude/teams/${AGENT_TEAMS_CONFIG.NATIVE_TEAM_NAME}/ 存在`)
-    console.warn(`   但 ${AGENT_TEAMS_CONFIG.ENV_FLAG} 未设置为 1`)
-    console.warn(`   建议在 .claude/settings.json 中添加：`)
-    console.warn(`     { "env": { "${AGENT_TEAMS_CONFIG.ENV_FLAG}": "1" } }`)
-  }
-
+  // [v14.3] Agent Teams 已废弃，始终返回 false
+  // DESIGN_REVIEW 使用 fullstack-engineer 单 agent
   return false
 }
 
