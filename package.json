@@ -1,6 +1,6 @@
 {
   "name": "claude-harness",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "claude-harness - A state machine driven multi-agent development workflow with 12 specialized agents",
   "main": "scripts/workflow.js",
   "scripts": {
@@ -14,7 +14,8 @@
     "workflow": "node scripts/workflow.js",
     "status": "node scripts/workflow.js status",
     "advance": "node scripts/workflow.js advance",
-    "rollback": "node scripts/workflow.js rollback"
+    "rollback": "node scripts/workflow.js rollback",
+    "bump-version": "node scripts/bump-version.js"
   },
   "keywords": [
     "workflow",
