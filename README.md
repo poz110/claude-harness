@@ -24,11 +24,11 @@ claude plugin marketplace add poz110/claude-harness
 claude plugin install claude-harness
 ```
 
-**3. 更新到最新版本**（作者发布新版本后需要运行）
-
-```bash
-git -C ~/.claude/plugins/marketplaces/claude-harness pull origin main && claude plugin install claude-harness
-```
+> [!TIP]
+> 作者发布新版本后，运行以下命令更新：
+> ```bash
+> git -C ~/.claude/plugins/marketplaces/claude-harness pull origin main && claude plugin install claude-harness
+> ```
 
 安装完成后，所有命令即刻可用，包括 `/autopilot` 全流程自动模式。工作流状态写入当前项目目录的 `state/`，跨会话持久保存。
 
