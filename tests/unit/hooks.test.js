@@ -171,12 +171,10 @@ describe('hookPreWrite — Permission Coverage', () => {
     }
   })
 
-  it('no two non-deprecated agents share the exact same write path for docs/', () => {
+  it('no two agents share the exact same write path for docs/', () => {
     // Exception: traceability-matrix.md is shared (architect + fullstack) — that's intentional
     const docPaths = {}
-    const deprecatedAgents = ['frontend-engineer', 'backend-engineer']
     for (const [agent, perm] of Object.entries(AGENT_WRITE_PERMISSIONS)) {
-      if (deprecatedAgents.includes(agent)) continue
       for (const p of perm.allowedPaths) {
         if (p.startsWith('docs/') && !p.endsWith('/')) {
           if (!docPaths[p]) docPaths[p] = []

@@ -53,6 +53,7 @@ const {
   appendTrace, snapshotArtifacts, writeAgentResult, readAgentResult,  // [v1.0 Harness A/D/E]
   TRACE_LOG, AGENT_RESULT_FILE,
   estimateTokens,   // [v1.0 P1.5]
+  ROOT,             // [v1.1] 统一路径，避免重复定义
 } = require('./lib/state.js')
 
 const {
@@ -205,7 +206,6 @@ function handleQaFailure(state) {
 }
 
 function triggerSecurityReaudit(state) {
-  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const secReport = path.join(ROOT, 'docs/security-report.md')
   if (fs.existsSync(secReport)) { fs.unlinkSync(secReport); console.log('🗑  Cleaned stale security-report.md') }
   state.history.push({ from: state.currentState, to: 'SECURITY_REVIEW', timestamp: new Date().toISOString(), agent: 'system', type: 'security-reaudit' })
@@ -311,7 +311,6 @@ function displayStatus(state) {
 // ─── Design Baseline (保留自 v13）──────────────────────────────────────
 
 function generateDesignBaseline() {
-  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const designDir   = path.join(ROOT, 'design')
   const statesDir   = path.join(ROOT, 'design', 'states')
   const baselineDir = path.join(ROOT, 'design', 'baseline')
@@ -393,7 +392,6 @@ function generateDesignBaseline() {
 }
 
 function verifySecurityFix() {
-  const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
   const reportFile = path.join(ROOT, 'docs/security-report.md')
   const fixesFile  = path.join(ROOT, 'docs/security-fixes.md')
   if (!fs.existsSync(reportFile)) { console.error('❌ docs/security-report.md not found'); process.exit(1) }
@@ -479,7 +477,6 @@ async function main() {
 
         // ── [v1.0] PRD_DRAFT → PRD_REVIEW 時清理需求注入文件 ──────────────────
         if (prevState === 'PRD_DRAFT' && state.currentState === 'PRD_REVIEW') {
-          const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
           const requirementPath = path.join(ROOT, 'state/autopilot-requirement.md')
           if (fs.existsSync(requirementPath)) {
             fs.unlinkSync(requirementPath)
@@ -572,7 +569,6 @@ async function main() {
       // [v1.0] Autopilot mode — 全流程自動，無需人為干預確認
       // [v1.0] 支持需求描述參數注入 + hotfix 模式
       case 'init-autopilot': {
-        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const STATE_DIR = path.join(ROOT, 'state')
 
         // 解析參數：[mode] [requirement...]
@@ -661,7 +657,6 @@ ${requirement.trim()}
 
       // [v1.0 P1.4] Feature mode — 在現有項目上添加新功能，跳過 Arch/Design 階段
       case 'init-feature': {
-        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const hasArch = fs.existsSync(path.join(ROOT, 'docs/arch-decision.md'))
         if (!hasArch) {
           console.error('\n❌ docs/arch-decision.md 不存在')
@@ -693,7 +688,6 @@ ${requirement.trim()}
       // [v1.0 P1.1] Hotfix 模式 — 緊急修復，跳過設計/實現階段
       // [v1.0] 支持需求描述參數注入
       case 'init-hotfix': {
-        const ROOT = process.env.HARNESS_ROOT || path.join(__dirname, '..')
         const STATE_DIR = path.join(ROOT, 'state')
 
         // 解析參數：[requirement...]
@@ -899,47 +893,9 @@ ${requirement}
       }
 
       case 'generate-team-dispatch': {
-        const {
-          AGENT_TEAMS_CONFIG,
-          AGENT_MODEL_MAP,
-        } = require('./lib/config.js')
-        const enabled = require('./lib/hooks.js').checkAgentTeamsEnabled()
-
-        if (!enabled) {
-          console.log(`\n⚠️  Agent Teams 未启用（${AGENT_TEAMS_CONFIG.ENV_FLAG} 未设为 1）`)
-          console.log(`   当前使用路径 B（文件轮询降级模式）\n`)
-          console.log(`── 路径 B：文件轮询降级模式 ─────────────────────────────────────`)
-          console.log(AGENT_TEAMS_CONFIG.FALLBACK_FORMAT_GUIDE)
-          console.log(`────────────────────────────────────────────────────────────\n`)
-
-          console.log(`  启用路径 A（Agent Teams）：`)
-          console.log(`     方式 1：.claude/settings.json 中添加`)
-          console.log(`       { "env": { "${AGENT_TEAMS_CONFIG.ENV_FLAG}": "1" } } }`)
-          console.log(`     方式 2：命令行设置`)
-          console.log(`       export ${AGENT_TEAMS_CONFIG.ENV_FLAG}=1\n`)
-
-          console.log(`  查看完整调度模板（需路径 A 启用后）：`)
-          console.log(`     node scripts/workflow.js generate-team-dispatch\n`)
-
-          break
-        }
-
-        console.log(`\n✅ Agent Teams 已启用（${AGENT_TEAMS_CONFIG.ENV_FLAG}=1）`)
-        console.log(`   团队名称：${AGENT_TEAMS_CONFIG.NATIVE_TEAM_NAME}`)
-        console.log(`   任务存储：~/.claude/tasks/${AGENT_TEAMS_CONFIG.NATIVE_TEAM_NAME}/`)
-        console.log(`   消息存储：~/.claude/teams/${AGENT_TEAMS_CONFIG.NATIVE_TEAM_NAME}/inboxes/\n`)
-
-        console.log(`── 路径 A：Agent Teams 原生调度模板 ──────────────────────────`)
-        console.log(AGENT_TEAMS_CONFIG.NATIVE_DISPATCH_TEMPLATE)
-
-        // [v1.0] P1.1 说明：teammate ID 是动态的
-        console.log(`\n  ⚠️  重要提示（v14）：`)
-        console.log(`     1. TeamCreate 返回的 teammate ID 是动态分配的，不是固定值`)
-        console.log(`     2. 上述模板中的 "to": "<fe-teammate-id>" 应替换为实际 ID`)
-        console.log(`     3. 可通过 TaskList() 查看 teammate 的实际 ID`)
-        console.log(`     4. 示例：TaskList({ "filter": "in_progress" })`)
-        console.log()
-
+        console.log(`\n⚠️  Agent Teams dispatch 已废弃（v14.3+）`)
+        console.log(`   DESIGN_REVIEW 现使用 fullstack-engineer 单 agent，无需并行团队调度。`)
+        console.log(`   如需文件通知机制，可使用 fallback-notify 命令。\n`)
         break
       }
 
@@ -1239,7 +1195,7 @@ STATE MUTATIONS:
 
 [v1.0] AGENT TEAMS — P1.1 改进：
   check-agent-teams               Detect current path (A=native / B=fallback)
-  generate-team-dispatch          Show native dispatch template (path A only, with teammate ID notice)
+  generate-team-dispatch          [deprecated] Use fullstack-engineer instead
   fallback-notify <from> <to> <message>  Append to review-notes.md (path B only)
 
 [v1.0] MODEL CONFIG (P1.2 — 差异化已应用）：

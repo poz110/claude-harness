@@ -87,20 +87,11 @@ function hookPostWrite() {
     }
   }
 
-  // 2. [v11.1] api-spec 变更通知（两路分离）
+  // 2. [v14.3] api-spec 变更通知
+  // DESIGN_REVIEW 现在使用 fullstack-engineer 单 agent，无需 FE/BE 协调
   if (relPath === 'docs/api-spec.md' && state.currentState === 'DESIGN_REVIEW') {
-    if (checkAgentTeamsEnabled()) {
-      // 路径 A：提示 BE 使用原生 SendMessage，不写文件
-      messages.push(`📡 [v11.1 Agent Teams] api-spec.md 已更新。`)
-      messages.push(`   BE teammate 应立即调用原生 SendMessage 通知 FE teammate：`)
-      messages.push(`   SendMessage({ "to": "<fe-teammate-name>", "text": "api-spec 已更新至 vX.X，变更：...", "summary": "api-spec vX.X 就绪" })`)
-      messages.push(`   参考完整模板：node scripts/workflow.js generate-team-dispatch`)
-    } else {
-      // 路径 B：提示 BE 追加到 review-notes.md（降级模式）
-      messages.push(`📝 [v11.1 文件轮询] api-spec.md 已更新。`)
-      messages.push(`   BE 应向 .claude/review-notes.md 追加变更通知（供 FE 下次读取）：`)
-      messages.push(`   node scripts/workflow.js fallback-notify be fe "api-spec 已更新至 vX.X。变更：..."`)
-    }
+    messages.push(`📄 docs/api-spec.md 已更新。`)
+    messages.push(`   fullstack-engineer 可直接继续。`)
   }
 
   // 3. [v1.0] P0.2：自动 context 追踪（写入操作）
