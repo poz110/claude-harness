@@ -33,7 +33,10 @@ description: "初始化 claude-harness：安装 agents 和 skills 到 ~/.claude/
 ### Step 1: 执行全局安装
 
 ```bash
-node scripts/workflow.js init
+# Claude Code 执行时 CWD = skills/<name>/，workflow.js 在 plugins/<name>/scripts/
+# market安装: plugins/<name>/skills/<name>/ → plugins/<name>/scripts/ = ../../scripts/
+# 本地开发:   .claude/skills/<name>/ → .claude/scripts/ = ../../scripts/
+node ../../scripts/workflow.js init
 ```
 
 这会将以下文件复制到 `~/.claude/`：
@@ -47,7 +50,7 @@ node scripts/workflow.js init
 ### Step 2: 验证安装
 
 ```bash
-node scripts/workflow.js check-global
+node ../../scripts/workflow.js check-global
 ```
 
 ### Step 3: 确认成功
@@ -79,7 +82,7 @@ node scripts/workflow.js check-global
 | 错误 | 解决方案 |
 |------|---------|
 | `~/.claude/` 无写入权限 | 检查文件系统权限 |
-| 已有旧版本 | 运行 `node scripts/workflow.js install-global --force` 强制更新 |
+| 已有旧版本 | 运行 `node ../../scripts/workflow.js install-global --force` 强制更新 |
 | 安装失败 | 检查 Node.js 版本（需 >= 18.0.0） |
 
 ---

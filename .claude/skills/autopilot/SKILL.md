@@ -59,7 +59,16 @@ if (args.length === 0) {
 **每次執行 Autopilot 的第一個 Bash 命令必須是路徑解析：**
 
 ```bash
-_w=scripts/workflow.js; test -f "$_w" || _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1); echo "$_w" > /tmp/.harness_wf; echo "harness: $_w"
+# 優先從項目根目錄找（本地開發時）；Marketplace 安裝時從插件目錄找
+_w=scripts/workflow.js
+if ! [ -f "$_w" ]; then
+  _w=$(ls $HOME/.claude/plugins/marketplaces/claude-harness/scripts/workflow.js 2>/dev/null)
+fi
+if ! [ -f "$_w" ]; then
+  _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1)
+fi
+echo "$_w" > /tmp/.harness_wf
+echo "harness: $_w"
 ```
 
 後續所有 workflow 命令統一使用以下格式（替代裸 `node scripts/workflow.js`）：

@@ -36,7 +36,15 @@ mode = 'feature'
 
 1. **路徑解析**（必須第一步）：
    ```bash
-   _w=scripts/workflow.js; test -f "$_w" || _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1); echo "$_w" > /tmp/.harness_wf; echo "harness: $_w"
+   _w=scripts/workflow.js
+   if ! [ -f "$_w" ]; then
+     _w=$(ls $HOME/.claude/plugins/marketplaces/claude-harness/scripts/workflow.js 2>/dev/null)
+   fi
+   if ! [ -f "$_w" ]; then
+     _w=$(ls $HOME/.claude/plugins/cache/claude-harness/claude-harness/*/scripts/workflow.js 2>/dev/null|tail -1)
+   fi
+   echo "$_w" > /tmp/.harness_wf
+   echo "harness: $_w"
    ```
 
 2. **啟用 autopilot feature 模式**：
