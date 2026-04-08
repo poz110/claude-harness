@@ -68,47 +68,53 @@ try {
    requirement = issue.summary + "\n" + issue.description（纯文本部分）
 
 5. 分析图片附件
-   ⚠️ 禁止调用以下 MCP 工具（批量拉取，数据量超限）：
-      - jira_get_issue_images   ← 返回所有图片二进制，>20MB
-      - get_page_images         ← 同上
-      - get_content_attachments ← 返回 96k+ 字符元数据
+   ⚠️ 禁止调用以下 MCP 工具（数据量超限）：
+      - jira_get_issue_images      ← 返回所有图片二进制，>20MB
+      - confluence_get_page_images ← 同上
+      - WebFetch Confluence URL    ← 需认证，会 302 重定向到登录页
 
-   ✅ 允许对单张图片调用：
-      - mcp__atlassian__download_attachment(attachment_id)         ← Jira 附件
-      - mcp__atlassian__download_confluence_attachment(attachmentUrl) ← Confluence 图片
-
-   注意：Confluence 图片 URL 需要 Atlassian 认证，WebFetch 无法访问（会得到 302 重定向），必须用 MCP 工具下载。
+   ✅ 正确方式（见下方 5a / 5b）：
+      - Jira 附件：mcp__atlassian__jira_download_attachments(issue_key)
+      - Confluence 附件：两步法（先 get_attachments 拿 att_id，再 download_attachment）
+      MCP 下载结果直接返回 base64 EmbeddedResource，Claude 可视觉分析，无需写临时文件。
 
    5a. Jira 直接附件
-   attachments = issue.fields.attachment
-   imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
-
-   if (imageAttachments.length > 0) {
-     for each img in imageAttachments (最多处理前 3 张):
-       try {
-         binary = mcp__atlassian__download_attachment(attachment_id: img.id)
-         tempFile = "/tmp/jira-img-" + img.id + ".png"
-         Write file: tempFile, content: binary
-         analysis = Read(tempFile) → 视觉分析，描述：UI 问题位置、错误信息、设计标注
-         Bash: rm -f tempFile
-         attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
-       } catch (e) {
-         attachmentAnalysis.push("[" + img.filename + "]: 图片无法加载")
-       }
+   if (issue.fields.attachment 非空) {
+     try {
+       // 一次下载该 issue 所有图片附件，MCP 自动过滤非图片
+       result = mcp__atlassian__jira_download_attachments(issue_key: issueKey)
+       // result 包含文字摘要 + 每张图片的 EmbeddedResource，Claude 直接视觉分析
+       analysis = 对 result 中每张图片描述：UI 问题位置、错误信息、设计标注
+       attachmentAnalysis.push("[Jira Attachments]: " + analysis)
+     } catch (e) {
+       attachmentAnalysis.push("[Jira Attachments]: 图片无法加载")
+     }
    }
 
    5b. Confluence Wiki 图片宏（description 中的 !http://...! 格式）
+   两步法：先获取 att_id，再下载。
+
    confluenceImageUrls = 从 issue.description 中提取所有匹配 /!([^!|]+?\.(?:png|jpg|jpeg|gif|webp))[|!]/i 的 URL
 
    if (confluenceImageUrls.length > 0) {
      for each imgUrl in confluenceImageUrls (最多处理前 3 张):
        try {
-         binary = mcp__atlassian__download_confluence_attachment(attachmentUrl: imgUrl)
-         tempFile = "/tmp/confluence-img-" + Date.now() + ".png"
-         Write file: tempFile, content: binary
-         analysis = Read(tempFile) → 视觉分析，描述：UI 布局、组件、文字、交互
-         Bash: rm -f tempFile
-         attachmentAnalysis.push("[Confluence Image]: " + analysis)
+         // Step 1：从 URL 解析 pageId 和 filename
+         // URL 格式：/wiki/download/attachments/{pageId}/{filename}.png
+         pageId   = imgUrl.match(/attachments\/(\d+)\//)[1]
+         filename = decodeURIComponent(imgUrl.match(/attachments\/\d+\/([^?|]+)/)[1])
+
+         // Step 2：用 filename 过滤查询，避免拉取全部附件（可能 96k+ 字符）
+         attList  = mcp__atlassian__confluence_get_attachments(
+                      content_id: pageId,
+                      filename: filename   // ← 精确匹配，响应体小
+                    )
+         attId    = attList.attachments[0].id  // 形如 "att1990361251"
+
+         // Step 3：下载，MCP 返回 base64 EmbeddedResource，Claude 直接视觉分析
+         mcp__atlassian__confluence_download_attachment(attachment_id: attId)
+         analysis = 描述图片：UI 布局、组件、标注文字、需要修改的地方
+         attachmentAnalysis.push("[Confluence Image " + filename + "]: " + analysis)
        } catch (e) {
          attachmentAnalysis.push("[Confluence Image]: 图片无法加载，URL: " + imgUrl)
        }
@@ -248,5 +254,7 @@ if (state/jira-context.json 存在) {
 | 权限不足 | 确认邮箱有访问 Jira 项目权限 |
 | 回写失败 | 记录警告，不阻塞流程完成 |
 | Confluence 图片下载失败 | 检查 token 是否有 Confluence 访问权限 |
-| `Request too large (max 20MB)` | 禁止调用 `get_page_images` / `get_content_attachments`（批量）；单张图片改用 `download_confluence_attachment(attachmentUrl)` |
-| Confluence 图片 WebFetch 返回 302 | Confluence URL 需认证，WebFetch 无 token，必须用 `download_confluence_attachment` MCP 工具 |
+| `confluence_get_attachments` 返回超大响应 | 必须传 `filename` 参数做精确过滤，避免拉取整页附件列表（可能 96k+ 字符） |
+| `confluence_download_attachment` 报错 attachment_id 格式 | attachment_id 须为 `att` 前缀形式（如 `att1990361251`），从 `get_attachments` 返回的 `id` 字段取得 |
+| Confluence 图片 WebFetch 返回 302 | Confluence URL 需认证，WebFetch 无 token；必须用两步法：`confluence_get_attachments(filename)` → `confluence_download_attachment(att_id)` |
+| `jira_download_attachments` 无输出 | 该工具只返回图片类附件；若 issue 只有非图片附件则返回空摘要，属正常 |
