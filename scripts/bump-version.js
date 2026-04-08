@@ -6,7 +6,9 @@ const v = args[0]
 if (!/^\d+\.\d+\.\d+$/.test(v)) { console.error('Must be x.y.z'); process.exit(1) }
 const ROOT = path.join(__dirname, '..')
 const files = ['package.json', 'plugins/claude-harness/plugin.json']
+const marketplace = '.claude-plugin/marketplace.json'
 let ok = [], skip = []
+
 for (const f of files) {
   const p = path.join(ROOT, f)
   if (!fs.existsSync(p)) { skip.push(f + ' (not found)'); continue }
@@ -17,6 +19,23 @@ for (const f of files) {
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n')
   ok.push(f + ': ' + old + ' -> ' + v)
 }
+
+// Handle marketplace.json (nested plugins[].version)
+const mp = path.join(ROOT, marketplace)
+if (fs.existsSync(mp)) {
+  const j = JSON.parse(fs.readFileSync(mp, 'utf8'))
+  if (j.plugins && j.plugins[0] && j.plugins[0].version !== undefined) {
+    const old = j.plugins[0].version
+    j.plugins[0].version = v
+    fs.writeFileSync(mp, JSON.stringify(j, null, 2) + '\n')
+    ok.push(marketplace + ': plugins[0].version ' + old + ' -> ' + v)
+  } else {
+    skip.push(marketplace + ' (no plugins[0].version field)')
+  }
+} else {
+  skip.push(marketplace + ' (not found)')
+}
+
 console.log('\nUpdated:')
 ok.forEach(x => console.log('  + ' + x))
 if (skip.length) { skip.forEach(x => console.log('  - ' + x)) }
