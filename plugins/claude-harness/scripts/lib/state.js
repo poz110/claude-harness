@@ -177,7 +177,12 @@ function appendAgentLog(entry) {
   fs.appendFileSync(AGENT_LOG, JSON.stringify(entry) + '\n')
 }
 
+function _ensureStateDir() {
+  if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true })
+}
+
 function appendErrorLog(error) {
+  _ensureStateDir()
   let errors = []
   if (fs.existsSync(ERROR_LOG)) { try { errors = JSON.parse(fs.readFileSync(ERROR_LOG, 'utf8')) } catch {} }
   errors.push({ timestamp: new Date().toISOString(), error: String(error) })
