@@ -13,6 +13,7 @@ const init        = require('./init.js')
 const install     = require('./install.js')
 const trace       = require('./trace.js')
 const misc        = require('./misc.js')
+const archive     = require('./archive.js')
 
 module.exports = {
   ...navigation,
@@ -23,4 +24,5 @@ module.exports = {
   ...install,
   ...trace,
   ...misc,
+  ...archive,
 }

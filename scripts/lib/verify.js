@@ -504,6 +504,73 @@ function getGitDiffBase() {
   return '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 }
 
+// ─── [v1.5] File Mirror Sync Check ────────────────────────────────────────
+
+function syncCheck() {
+  const crypto = require('crypto')
+
+  const MIRROR_PAIRS = [
+    { label: 'scripts', src: 'scripts',        dst: 'plugins/claude-harness/scripts', exclude: ['bump-version.js'] },
+    { label: 'agents',  src: '.claude/agents',  dst: 'plugins/claude-harness/agents',  exclude: [] },
+    { label: 'skills',  src: '.claude/skills',  dst: 'plugins/claude-harness/skills',  exclude: [] },
+  ]
+
+  function collectFiles(dir, base, exclude) {
+    const result = []
+    if (!fs.existsSync(dir)) return result
+    for (const item of fs.readdirSync(dir)) {
+      if (exclude.includes(item)) continue
+      const full = path.join(dir, item)
+      const rel  = base ? `${base}/${item}` : item
+      if (fs.statSync(full).isDirectory()) {
+        result.push(...collectFiles(full, rel, exclude))
+      } else {
+        result.push(rel)
+      }
+    }
+    return result
+  }
+
+  function fileHash(filePath) {
+    const content = fs.readFileSync(filePath)
+    return crypto.createHash('sha256').update(content).digest('hex').slice(0, 12)
+  }
+
+  const diffs = []
+
+  for (const pair of MIRROR_PAIRS) {
+    const srcDir = path.join(ROOT, pair.src)
+    const dstDir = path.join(ROOT, pair.dst)
+
+    if (!fs.existsSync(srcDir)) { diffs.push({ file: pair.src + '/', status: 'src-missing', label: pair.label }); continue }
+    if (!fs.existsSync(dstDir)) { diffs.push({ file: pair.dst + '/', status: 'dst-missing', label: pair.label }); continue }
+
+    const srcFiles = collectFiles(srcDir, '', pair.exclude)
+    const dstFiles = collectFiles(dstDir, '', pair.exclude)
+    const srcSet = new Set(srcFiles)
+    const dstSet = new Set(dstFiles)
+
+    for (const f of srcFiles) {
+      if (!dstSet.has(f)) {
+        diffs.push({ file: `${pair.src}/${f}`, status: 'src-only', label: pair.label })
+      } else {
+        const srcHash = fileHash(path.join(srcDir, f))
+        const dstHash = fileHash(path.join(dstDir, f))
+        if (srcHash !== dstHash) {
+          diffs.push({ file: f, status: 'modified', label: pair.label, src: pair.src, dst: pair.dst })
+        }
+      }
+    }
+    for (const f of dstFiles) {
+      if (!srcSet.has(f)) {
+        diffs.push({ file: `${pair.dst}/${f}`, status: 'dst-only', label: pair.label })
+      }
+    }
+  }
+
+  return { ok: diffs.length === 0, diffs }
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -514,4 +581,5 @@ module.exports = {
   runIntegrationCheck,
   runSmokeTest,
   getGitDiffBase,
+  syncCheck,
 }

@@ -8,6 +8,7 @@
 const {
   checkPrereqs, validateDoc,
   fullVerify, checkCodeOutputs, runIntegrationCheck, runSmokeTest,
+  syncCheck,
 } = require('../verify.js')
 
 const { loadState } = require('../state.js')
@@ -82,6 +83,28 @@ async function cmdSmokeTest() {
   if (!result.ok) process.exit(1)
 }
 
+/**
+ * Execute sync-check command
+ */
+function cmdSyncCheck() {
+  console.log('\n🔍 文件镜像一致性检查\n')
+  const result = syncCheck()
+  if (result.ok) {
+    console.log('✅ 文件镜像完全一致（scripts/ ↔ plugins/, agents/, skills/）')
+  } else {
+    console.log(`❌ 发现 ${result.diffs.length} 处不一致:\n`)
+    for (const d of result.diffs) {
+      const icon = d.status === 'modified' ? '📝' : d.status === 'src-only' ? '➕' : d.status === 'dst-only' ? '➖' : '⚠️'
+      console.log(`   ${icon} [${d.status}] ${d.file}`)
+    }
+    console.log('\n   同步命令:')
+    console.log('   rsync -av --delete scripts/ plugins/claude-harness/scripts/ --exclude bump-version.js')
+    console.log('   rsync -av .claude/agents/ plugins/claude-harness/agents/')
+    console.log('   rsync -av .claude/skills/ plugins/claude-harness/skills/')
+    process.exit(1)
+  }
+}
+
 module.exports = {
   cmdCheck,
   cmdValidateDoc,
@@ -89,4 +112,5 @@ module.exports = {
   cmdVerifyCode,
   cmdIntegrationCheck,
   cmdSmokeTest,
+  cmdSyncCheck,
 }

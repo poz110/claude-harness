@@ -12,7 +12,7 @@
 const fs   = require('fs')
 const path = require('path')
 
-const SCHEMA_VERSION = '1.0'
+const SCHEMA_VERSION = '1.1'
 
 const STATES = {
   IDEA:             { desc: 'Initial idea, PM to generate PRD',                   manual: false },
@@ -912,6 +912,57 @@ function validateConfig() {
   }
 }
 
+// ─── [v1.5] 推进前硬文档验证映射 ───────────────────────────────────────────
+//
+// 每个状态在 advance 前需要验证的文档 validator key 列表。
+// 只有文件存在但内容不合格时阻断（文件不存在已由 checkPrereqs 处理）。
+// 纯代码产出阶段（DESIGN_REVIEW、IMPLEMENTATION）不做 doc 验证。
+//
+const ARTIFACT_VALIDATORS_FOR_STATE = {
+  PRD_DRAFT:         ['prd'],
+  PRD_REVIEW:        ['arch', 'security-baseline', 'traceability'],
+  ARCH_REVIEW:       ['design-spec'],
+  CEO_REVIEW:        ['ceo-review'],
+  DESIGN_PHASE:      ['interaction-spec'],
+  DESIGN_REVIEW:     [],
+  IMPLEMENTATION:    [],
+  CODE_REVIEW:       ['test-report'],
+  QA_PHASE:          [],
+  SECURITY_REVIEW:   [],
+  DEPLOY_PREP_SETUP: ['deploy-plan'],
+  DEPLOY_PREP:       [],
+}
+
+// ─── [v1.5] 前置条件诊断提示 ────────────────────────────────────────────────
+//
+// 每个前置文件的产出者、所属阶段、修复建议。
+// 用于 advance 失败时给出可操作的诊断信息。
+//
+const PREREQ_HINTS = {
+  'docs/prd.md':                 { producer: 'product-manager',    state: 'IDEA',             fix: '让 PM 生成 PRD: 推进 IDEA 状态' },
+  'docs/arch-decision.md':       { producer: 'software-architect', state: 'PRD_REVIEW',       fix: '让架构师生成 ADR: 推进 PRD_REVIEW 状态' },
+  'docs/security-baseline.md':   { producer: 'software-architect', state: 'PRD_REVIEW',       fix: '同 arch-decision，架构师同时产出' },
+  'docs/design-spec.md':         { producer: 'ux-designer',        state: 'ARCH_REVIEW',      fix: '让设计师生成设计规范: 推进 ARCH_REVIEW' },
+  'docs/ceo-review.md':          { producer: 'plan-ceo-review',    state: 'CEO_REVIEW',       fix: '让 CEO 审视 Agent 审查: 推进 ARCH_REVIEW 后等待' },
+  'docs/interaction-spec.md':    { producer: 'ux-designer',        state: 'DESIGN_PHASE',     fix: '让设计师生成交互规范: 确认 DESIGN_PHASE' },
+  'docs/api-spec.md':            { producer: 'fullstack-engineer', state: 'DESIGN_REVIEW',    fix: 'Fullstack Agent 第一步产出: 推进 DESIGN_REVIEW' },
+  'docs/traceability-matrix.md': { producer: 'software-architect', state: 'PRD_REVIEW',       fix: '架构师产出追溯矩阵: 推进 PRD_REVIEW' },
+  'docs/code-review.md':         { producer: 'code-reviewer',      state: 'IMPLEMENTATION',   fix: '让代码审查 Agent 审查: 推进 IMPLEMENTATION' },
+  'docs/test-plan.md':           { producer: 'qa-engineer',        state: 'CODE_REVIEW',      fix: '让 QA Agent 生成测试计划: 推进 CODE_REVIEW' },
+  'docs/test-report.md':         { producer: 'qa-engineer',        state: 'CODE_REVIEW',      fix: '让 QA Agent 执行测试: 推进 CODE_REVIEW' },
+  'docs/security-report.md':     { producer: 'security-auditor',   state: 'QA_PHASE',         fix: '让安全审计 Agent 审查: 推进 QA_PHASE' },
+  'docs/deploy-plan.md':         { producer: 'devops-engineer',    state: 'DEPLOY_PREP_SETUP',fix: '让 DevOps Agent 准备部署: 推进 DEPLOY_PREP_SETUP' },
+  'docs/runbook.md':             { producer: 'devops-engineer',    state: 'DEPLOY_PREP_SETUP',fix: '同 deploy-plan，DevOps 同时产出' },
+  'DESIGN.md':                   { producer: 'ux-designer',        state: 'ARCH_REVIEW',      fix: '让设计师生成设计系统: 推进 ARCH_REVIEW' },
+}
+
+// ─── [v1.1] 归档配置 ─────────────────────────────────────────────────────
+const ARCHIVE_CONFIG = {
+  COPY_DIRS:  ['docs', 'design'],
+  COPY_FILES: ['DESIGN.md'],
+  INDEX_FILE: 'task-index.jsonl',
+}
+
 validateConfig()
 
 module.exports = {
@@ -926,6 +977,7 @@ module.exports = {
   HOTFIX_SKIP_STATES, HOTFIX_PREREQS,
   AUTOPILOT_MODES, AUTOPILOT_SKIP_INTERACTIONS,
   AGENT_WRITE_PERMISSIONS, TRACKED_ARTIFACT_FILES,
+  ARTIFACT_VALIDATORS_FOR_STATE, PREREQ_HINTS, ARCHIVE_CONFIG,
   FE_PATH_PREFIX: 'apps/web/',
   BE_PATH_PREFIX: 'apps/server/',
 }

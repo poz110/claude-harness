@@ -44,6 +44,7 @@ const {
   FEATURE_SKIP_STATES,   // [v1.0 P1.4]
   HOTFIX_SKIP_STATES,    // [v1.0 P1.1]
   AGENT_MODEL_MAP, MODEL_COSTS, COST_PER_MILLION,  // [v1.0 P1.5]
+  ARTIFACT_VALIDATORS_FOR_STATE, PREREQ_HINTS,     // [v1.5]
 } = require('./lib/config.js')
 
 const {
@@ -59,8 +60,12 @@ const {
 const {
   checkPrereqs, validateDoc,
   fullVerify, checkCodeOutputs, runIntegrationCheck, runSmokeTest,
-  getGitDiffBase, countFiles,
+  getGitDiffBase, countFiles, syncCheck,
 } = require('./lib/verify.js')
+
+const {
+  archiveCurrentTask, startTask,
+} = require('./lib/archive.js')
 
 const {
   installGlobal, checkGlobal, updateGlobal, uninstallGlobal, initProject,
@@ -224,6 +229,21 @@ function displayStatus(state) {
 
   console.log(`\n${'─'.repeat(64)}`)
   console.log(`  Workflow v${SCHEMA_VERSION}   Step ${step}/${stateKeys.length}  [schema: ${state.schemaVersion || '?'}]`)
+
+  // ── [v1.5] ASCII 进度条 + 时间线 ──────────────────────────────────────────
+  const total = stateKeys.length
+  const barWidth = 28
+  const filled = Math.round((step / total) * barWidth)
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled)
+  console.log(`  Progress: [${bar}] ${step}/${total}`)
+
+  const skipStates = state.mode === 'hotfix' ? HOTFIX_SKIP_STATES
+    : state.mode === 'feature' ? FEATURE_SKIP_STATES : []
+  const passedCount = step - 1
+  const remaining = total - step
+  const skippedCount = skipStates.filter(s => stateKeys.indexOf(s) < stateKeys.indexOf(current)).length
+  console.log(`  Timeline: ${passedCount} done${skippedCount > 0 ? ` / ${skippedCount} skipped` : ''} \u2192 [${current}] \u2192 ${remaining} remaining`)
+
   console.log(`${'─'.repeat(64)}`)
   // [v1.0] Autopilot mode badge (highest priority)
   if (state.autopilot) {
@@ -236,6 +256,9 @@ function displayStatus(state) {
   // [v1.0 P1.1] Hotfix mode badge
   if (state.mode === 'hotfix') {
     console.log(`  Mode    : 🔧 HOTFIX MODE — 自動跳過 ${HOTFIX_SKIP_STATES.join('/')}`)
+  }
+  if (state.taskId) {
+    console.log(`  Task    : ${state.taskId}`)
   }
   console.log(`  State   : ${current}`)
   console.log(`  Desc    : ${stateInfo?.desc}`)
@@ -270,6 +293,27 @@ function displayStatus(state) {
     const ratio = estimateTokens(budget) / ESTIMATED_TOTAL
     const icon  = ratio >= CONTEXT_BUDGET.REREAD_THRESHOLD ? '🔴' : ratio >= CONTEXT_BUDGET.WARN_THRESHOLD ? '🟡' : '🟢'
     console.log(`  Context : ${icon} ${budget.agentName} ~${Math.round(ratio * 100)}% (bash:${budget.bashCount || 0} write:${budget.writeCount || 0} read:${budget.readCount || 0})`)
+  }
+
+  // ── [v1.5] 累计成本显示 ─────────────────────────────────────────────────
+  if (fs.existsSync(TRACE_LOG)) {
+    try {
+      const traceLines = fs.readFileSync(TRACE_LOG, 'utf8').trim().split('\n').filter(Boolean)
+      let totalCost = 0, totalTokens = 0
+      for (const line of traceLines) {
+        try {
+          const e = JSON.parse(line)
+          if (e.eventType === 'advance' && e.costEstimate?.estimatedCost) {
+            totalCost += e.costEstimate.estimatedCost
+            totalTokens += e.costEstimate.tokens || 0
+          }
+        } catch {}
+      }
+      if (totalCost > 0) {
+        const tokensK = (totalTokens / 1000).toFixed(0)
+        console.log(`  Cost    : ~$${totalCost.toFixed(4)} (${tokensK}K tokens)`)
+      }
+    } catch {}
   }
 
   if (state.qaFailureCount > 0) console.log(`  QA Fails: ${state.qaFailureCount} (≥2 → ARCH_REVIEW escalation)`)
@@ -463,7 +507,14 @@ async function main() {
               }, state)
               console.error(`\n🚫 [harness gate] 無法推進：前置條件未滿足`)
               console.error(`   ${state.currentState} → ${nextTarget}`)
-              prereqCheck.missing.forEach(f => console.error(`   缺失：${f}`))
+              prereqCheck.missing.forEach(f => {
+                console.error(`   缺失：${f}`)
+                const hint = PREREQ_HINTS[f]
+                if (hint) {
+                  console.error(`          → 产出者: ${hint.producer} (在 ${hint.state} 阶段)`)
+                  console.error(`          → 修复: ${hint.fix}`)
+                }
+              })
               console.error(`\n   請先完成以上文件，完成後重新運行 advance`)
               console.error(`   （如需強制跳過，僅 MANUAL 節點支持 --force）`)
               process.exit(1)
@@ -471,9 +522,42 @@ async function main() {
           }
         }
 
+        // ── [v1.5] 硬文档验证门禁：文件存在但内容不合格时阻断 ────────────────
+        const validators = ARTIFACT_VALIDATORS_FOR_STATE[state.currentState] || []
+        if (validators.length > 0) {
+          const failures = []
+          for (const vKey of validators) {
+            const vResult = validateDoc(vKey, true)
+            if (!vResult.ok && !vResult.missing) {
+              const failed = vResult.results.filter(r => !r.passed).map(r => r.name)
+              failures.push({ doc: vKey, failed })
+            }
+          }
+          if (failures.length > 0) {
+            appendTrace({
+              type: 'doc_validation_block',
+              payload: { state: state.currentState, failures },
+            }, state)
+            console.error(`\n🚫 [harness gate] 文档内容验证未通过`)
+            console.error(`   当前状态: ${state.currentState}`)
+            failures.forEach(f => {
+              console.error(`   📋 ${f.doc}:`)
+              f.failed.forEach(name => console.error(`     ❌ ${name}`))
+            })
+            console.error(`\n   修复文档后重新运行 advance`)
+            console.error(`   手动检查: node scripts/workflow.js validate-doc <key>`)
+            process.exit(1)
+          }
+        }
+
         const prevState      = state.currentState
         const prevStateEnteredMs = Date.now()  // [v1.0 P1.4] 计时起点
         state = advance(state, force)
+
+        // ── [v1.1] 首次 advance（IDEA → PRD_DRAFT）分配 taskId ───────────────
+        if (prevState === 'IDEA' && !state.taskId) {
+          state = startTask(state)
+        }
 
         // ── [v1.0] PRD_DRAFT → PRD_REVIEW 時清理需求注入文件 ──────────────────
         if (prevState === 'PRD_DRAFT' && state.currentState === 'PRD_REVIEW') {
@@ -514,6 +598,15 @@ async function main() {
 
         saveState(state)
         console.log(`✅ Advanced to: ${state.currentState}`)
+
+        // ── [v1.1] 到达 DONE 时自动归档 ─────────────────────────────────────
+        if (state.currentState === 'DONE') {
+          const archResult = archiveCurrentTask(state)
+          if (archResult && !archResult.skipped) {
+            console.log(`📦 任务已归档: ${archResult.taskId}`)
+          }
+        }
+
         displayStatus(state)
         break
       }
@@ -541,6 +634,11 @@ async function main() {
       }
 
       case 'reset': {
+        // ── [v1.1] 归档当前任务后再清空 ─────────────────────────────────────
+        const archResult = archiveCurrentTask(state)
+        if (archResult && !archResult.skipped) {
+          console.log(`📦 已归档: ${archResult.taskId}`)
+        }
         const fresh = {
           schemaVersion: SCHEMA_VERSION, currentState: 'IDEA',
           rollbackStack: [], history: [],
@@ -551,6 +649,8 @@ async function main() {
           contextBudget: null,
           mode: 'greenfield',
           autopilot: false,
+          taskId: null,
+          taskStartedAt: null,
           createdAt: new Date().toISOString(),
         }
         saveState(fresh)
@@ -769,6 +869,37 @@ ${requirement}
         if (!result.ok) process.exit(1)
         break
       }
+
+      case 'sync-check': {
+        console.log('\n🔍 文件镜像一致性检查\n')
+        const syncResult = syncCheck()
+        if (syncResult.ok) {
+          console.log('✅ 文件镜像完全一致（scripts/ ↔ plugins/, agents/, skills/）')
+        } else {
+          console.log(`❌ 发现 ${syncResult.diffs.length} 处不一致:\n`)
+          for (const d of syncResult.diffs) {
+            const icon = d.status === 'modified' ? '📝' : d.status === 'src-only' ? '➕' : d.status === 'dst-only' ? '➖' : '⚠️'
+            console.log(`   ${icon} [${d.status}] ${d.file}`)
+          }
+          console.log('\n   同步命令（根据实际修改方向选择）:')
+          console.log('   根→插件: rsync -av --delete scripts/ plugins/claude-harness/scripts/ --exclude bump-version.js')
+          console.log('            rsync -av .claude/agents/ plugins/claude-harness/agents/')
+          console.log('            rsync -av .claude/skills/ plugins/claude-harness/skills/')
+          console.log('   插件→根: rsync -av --delete plugins/claude-harness/scripts/ scripts/ --exclude bump-version.js')
+          console.log('            rsync -av plugins/claude-harness/agents/ .claude/agents/')
+          console.log('            rsync -av plugins/claude-harness/skills/ .claude/skills/')
+          process.exit(1)
+        }
+        break
+      }
+
+      // ── [v1.1] Task archive commands ────────────────────────────────────────
+      case 'task-list':    { const { cmdTaskList }    = require('./lib/commands/archive.js'); cmdTaskList(args);    break }
+      case 'task-show':    { const { cmdTaskShow }    = require('./lib/commands/archive.js'); cmdTaskShow(args);    break }
+      case 'task-cat':     { const { cmdTaskCat }     = require('./lib/commands/archive.js'); cmdTaskCat(args);     break }
+      case 'task-diff':    { const { cmdTaskDiff }    = require('./lib/commands/archive.js'); cmdTaskDiff(args);    break }
+      case 'task-restore': { const { cmdTaskRestore } = require('./lib/commands/archive.js'); cmdTaskRestore(args); break }
+      case 'task-cost':    { const { cmdTaskCost }    = require('./lib/commands/archive.js'); cmdTaskCost(args);    break }
 
       case 'check-code': {
         const role   = args[0]?.toUpperCase()

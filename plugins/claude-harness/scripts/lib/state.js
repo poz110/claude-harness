@@ -129,6 +129,9 @@ function migrateState(state) {
   if (!('mode' in state)) state.mode = 'greenfield'
   // v15.1 fields — autopilot mode for full automation
   if (!('autopilot' in state)) state.autopilot = false
+  // v1.1 fields — multi-task versioning
+  if (!('taskId' in state)) state.taskId = null
+  if (!('taskStartedAt' in state)) state.taskStartedAt = null
   state.schemaVersion = SCHEMA_VERSION
   return state
 }
@@ -147,6 +150,8 @@ function loadState() {
       contextBudget: null,
       mode: 'greenfield',  // [v1.0.2 P1.4] 'greenfield' | 'feature'
       autopilot: false,     // [v1.0.1] 全流程自動模式
+      taskId: null,          // [v1.1] 当前任务 ID
+      taskStartedAt: null,   // [v1.1] 当前任务开始时间
     }
   }
   return migrateState(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')))

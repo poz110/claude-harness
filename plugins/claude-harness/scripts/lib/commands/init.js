@@ -19,6 +19,8 @@ const {
   ROOT,
 } = require('../state.js')
 
+const { archiveCurrentTask } = require('../archive.js')
+
 /**
  * Execute init-autopilot command
  */
@@ -115,6 +117,10 @@ function cmdStopAutopilot() {
  */
 function cmdInitFeature() {
   const state = loadState()
+  // [v1.1] 归档当前任务
+  const arch = archiveCurrentTask(state)
+  if (arch && !arch.skipped) console.log(`📦 已归档: ${arch.taskId}`)
+
   const hasArch = fs.existsSync(path.join(ROOT, 'docs/arch-decision.md'))
   if (!hasArch) {
     console.error('\n❌ docs/arch-decision.md 不存在')
@@ -127,6 +133,8 @@ function cmdInitFeature() {
   state.qaFailureCount = 0
   state.parallelProgress = { FE: false, BE: false }
   state.contextBudget = null
+  state.taskId = null
+  state.taskStartedAt = null
   state.history.push({
     from: state.currentState, to: 'IDEA',
     timestamp: new Date().toISOString(), agent: 'system', type: 'init-feature',
@@ -146,6 +154,10 @@ function cmdInitFeature() {
  */
 function cmdInitHotfix(args) {
   const state = loadState()
+  // [v1.1] 归档当前任务
+  const archHf = archiveCurrentTask(state)
+  if (archHf && !archHf.skipped) console.log(`📦 已归档: ${archHf.taskId}`)
+
   const STATE_DIR = path.join(ROOT, 'state')
   const requirement = args.join(' ').trim() || null
 
@@ -176,6 +188,8 @@ ${requirement}
   state.qaFailureCount = 0
   state.parallelProgress = { FE: false, BE: false }
   state.contextBudget = null
+  state.taskId = null
+  state.taskStartedAt = null
   state.history.push({
     from: state.currentState, to: 'IDEA',
     timestamp: new Date().toISOString(), agent: 'system', type: 'init-hotfix',
