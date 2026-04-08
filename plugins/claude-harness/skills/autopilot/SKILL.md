@@ -69,6 +69,35 @@ if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
   // 將 ticket 的 summary + description 作為需求描述
   requirement = issue.summary + "\n" + issue.description（純文本部分）
 
+  // 拉取並分析 Jira 附件中的圖片
+  try {
+    attachments = issue.fields.attachment（數組，每項含 filename / mimeType / content URL）
+
+    imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
+
+    if (imageAttachments.length > 0) {
+      attachmentAnalysis = []
+
+      for each img in imageAttachments:
+        // 使用 WebFetch 下載圖片（Atlassian MCP content 字段為帶 Bearer token 的直鏈）
+        // Claude 是多模態模型，可直接對圖片進行視覺分析
+        imageContent = WebFetch(img.content)
+
+        analysis = 對圖片進行視覺分析，重點描述：
+          - UI 問題位置（如：「右上角按鈕文字截斷」）
+          - 錯誤信息 / 異常狀態（如：「紅色 toast 顯示 500 錯誤」）
+          - 設計稿標注（如：「藍色框標記的輸入框邊框顏色不符」）
+          - 整體頁面結構（如適用）
+
+        attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
+
+      requirement += "\n\n[Jira 附件圖片分析]\n" + attachmentAnalysis.join("\n")
+    }
+  } catch (e) {
+    // 附件拉取失敗不阻塞主流程，記錄警告後繼續
+    console.warn("Jira 附件拉取失敗，跳過圖片分析：" + e.message)
+  }
+
   // 根據 issue type 自動選擇 mode（如未明確指定）
   if (issue.type in ['故障', 'Bug', 'bug']) {
     mode = 'hotfix'
