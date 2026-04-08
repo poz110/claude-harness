@@ -67,52 +67,42 @@ try {
 4. 提取需求文本
    requirement = issue.summary + "\n" + issue.description（纯文本部分）
 
-5. 分析图片附件（优先级：Jira 附件 > Confluence Wiki 图片宏）
-   
-   5a. 先尝试 Jira 附件中的图片：
-       attachments = issue.fields.attachment
-       imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
-       
-       if (imageAttachments.length > 0) {
-         for each img in imageAttachments:
-           // Jira 附件 URL 带 Bearer token，可直接 WebFetch（已认证）
-           imageContent = WebFetch(img.content)
-           analysis = 视觉分析(...)
-           attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
+5. 分析图片附件
+   ⚠️ 禁止调用以下 MCP 工具（会返回完整二进制数据，超过 20MB 限制）：
+      - jira_get_issue_images
+      - get_page_images
+      - get_content_attachments
+      - download_confluence_attachment
+      - download_attachment（如返回二进制 body 则跳过）
+
+   5a. Jira 直接附件（用 WebFetch，不用 MCP 下载工具）
+   attachments = issue.fields.attachment
+   imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
+
+   if (imageAttachments.length > 0) {
+     for each img in imageAttachments:
+       try {
+         // img.content 是带认证的 Jira 图片 URL，WebFetch 可直接访问
+         analysis = WebFetch(img.content, prompt: "Describe this UI screenshot in detail: layout, components, error messages, annotations.")
+         attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
+       } catch (e) {
+         attachmentAnalysis.push("[" + img.filename + "]: 图片无法加载")
        }
-   
-   5b. 再解析 description 中的 Confluence Wiki 图片宏：
-       // Confluence 图片宏格式：!http://...|thumbnail! 或 !http://...!
-       confluenceImageUrls = 从 description 中提取所有匹配 !http://...! 的 URL
-       
-       if (confluenceImageUrls.length > 0) {
-         for each imgUrl in confluenceImageUrls:
-           // 从 URL 提取 pageId（格式：http://domain/wiki/download/attachments/{pageId}/{filename}）
-           pageId = 从 imgUrl 提取数字 ID（最后一个路径段前的数字）
-           
-           // 先获取 page 元数据（包含 spaceId）
-           pageInfo = mcp__atlassian__read_confluence_page(pageId: pageId)
-           spaceId = pageInfo.space.key
-           
-           // 下载图片二进制
-           imageBinary = mcp__atlassian__download_confluence_attachment(
-             spaceId: spaceId,
-             pageId: pageId,
-             attachmentUrl: imgUrl
-           )
-           
-           // 将二进制写入临时文件供 vision 分析
-           tempFile = "/tmp/confluence-image-" + hash(imgUrl) + ".png"
-           Write file: tempFile, content: imageBinary
-           
-           // vision 分析（通过 Read 工具读图片）
-           analysis = Read(tempFile) → 视觉分析
-           
-           // 清理临时文件
-           Bash: rm -f tempFile
-           
-           attachmentAnalysis.push("[Confluence Image]: " + analysis)
+   }
+
+   5b. Confluence Wiki 图片宏（description 中的 !http://...! 格式）
+   confluenceImageUrls = 从 issue.description 中提取所有匹配 /!([^!|]+?\.(?:png|jpg|jpeg|gif|webp))[|!]/i 的 URL
+
+   if (confluenceImageUrls.length > 0) {
+     for each imgUrl in confluenceImageUrls:
+       try {
+         // 直接 WebFetch，不调用任何 MCP 二进制下载工具
+         analysis = WebFetch(imgUrl, prompt: "Describe this UI screenshot or design image in detail for a developer: layout, components, text, interactions.")
+         attachmentAnalysis.push("[Confluence Image]: " + analysis)
+       } catch (e) {
+         attachmentAnalysis.push("[Confluence Image]: 图片无法加载，URL: " + imgUrl)
        }
+   }
 
    if (attachmentAnalysis.length > 0) {
      requirement += "\n\n[Jira 附件图片分析]\n" + attachmentAnalysis.join("\n")
@@ -248,3 +238,4 @@ if (state/jira-context.json 存在) {
 | 权限不足 | 确认邮箱有访问 Jira 项目权限 |
 | 回写失败 | 记录警告，不阻塞流程完成 |
 | Confluence 图片下载失败 | 检查 token 是否有 Confluence 访问权限 |
+| `Request too large (max 20MB)` | 禁止调用 `get_page_images` / `get_content_attachments` / `download_confluence_attachment`，改用 WebFetch 直接读 URL |

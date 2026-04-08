@@ -109,6 +109,33 @@ git add . && git commit -m "chore: bump to <version>" && git push
 
 **注意**：如果只改 `package.json` 而不用 `bump-version`，marketplace 版本不会同步，导致其他用户安装时拿到旧文件。
 
+## 文件同步规则
+
+项目中以下路径存放**相同内容**的镜像文件，修改任意一处必须同步另一处：
+
+| 修改路径 | 必须同步到 |
+|----------|-----------|
+| `plugins/claude-harness/skills/<name>/SKILL.md` | `.claude/skills/<name>/SKILL.md` |
+| `plugins/claude-harness/agents/<name>.md` | `.claude/agents/<name>.md` |
+| `plugins/claude-harness/scripts/**/*.js` | `scripts/**/*.js`（同路径） |
+| `scripts/**/*.js`（非 `bump-version.js`） | `plugins/claude-harness/scripts/**/*.js`（同路径） |
+
+> `scripts/bump-version.js` 仅存在于根目录，无需同步。
+> `plugins/claude-harness/plugin.json` 仅存在于插件目录，无需同步。
+
+**快速同步命令：**
+```bash
+# plugins → 根目录（从插件目录同步到根）
+rsync -av --delete plugins/claude-harness/scripts/ scripts/ --exclude bump-version.js
+rsync -av plugins/claude-harness/agents/ .claude/agents/
+rsync -av plugins/claude-harness/skills/ .claude/skills/
+
+# 根目录 → plugins（从根目录同步到插件）
+rsync -av --delete scripts/ plugins/claude-harness/scripts/ --exclude bump-version.js
+rsync -av .claude/agents/ plugins/claude-harness/agents/
+rsync -av .claude/skills/ plugins/claude-harness/skills/
+```
+
 ## 模型配置
 
 修改 `scripts/lib/config.js` → `AGENT_MODEL_MAP`，然后 `node scripts/workflow.js install-global --force`
