@@ -27,7 +27,10 @@ claude plugin install claude-harness
 > [!TIP]
 > 作者发布新版本后，运行以下命令更新：
 > ```bash
-> git -C ~/.claude/plugins/marketplaces/claude-harness pull origin main && claude plugin install claude-harness
+> claude plugin marketplace remove claude-harness
+> rm -rf ~/.claude/plugins/cache/claude-harness
+> claude plugin marketplace add poz110/claude-harness
+> claude plugin install claude-harness
 > ```
 
 安装完成后，所有命令即刻可用，包括 `/autopilot` 全流程自动模式。工作流状态写入当前项目目录的 `state/`，跨会话持久保存。
@@ -45,13 +48,12 @@ claude --dangerously-skip-permissions
 /autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
 ```
 
-> **已有旧版本，需要更新？** marketplace 源不会自动同步，运行：
+> **已有旧版本，需要更新？** marketplace 源不会自动同步，完整流程：
 > ```bash
-> git -C ~/.claude/plugins/marketplaces/claude-harness pull origin main && claude plugin install claude-harness
-> ```
-> 或者简写：
-> ```bash
-> claudep
+> claude plugin marketplace remove claude-harness
+> rm -rf ~/.claude/plugins/cache/claude-harness
+> claude plugin marketplace add poz110/claude-harness
+> claude plugin install claude-harness
 > ```
 
 ### 方式二：源码安装
