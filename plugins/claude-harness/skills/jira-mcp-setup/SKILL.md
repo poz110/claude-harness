@@ -68,22 +68,29 @@ try {
    requirement = issue.summary + "\n" + issue.description（纯文本部分）
 
 5. 分析图片附件
-   ⚠️ 禁止调用以下 MCP 工具（会返回完整二进制数据，超过 20MB 限制）：
-      - jira_get_issue_images
-      - get_page_images
-      - get_content_attachments
-      - download_confluence_attachment
-      - download_attachment（如返回二进制 body 则跳过）
+   ⚠️ 禁止调用以下 MCP 工具（批量拉取，数据量超限）：
+      - jira_get_issue_images   ← 返回所有图片二进制，>20MB
+      - get_page_images         ← 同上
+      - get_content_attachments ← 返回 96k+ 字符元数据
 
-   5a. Jira 直接附件（用 WebFetch，不用 MCP 下载工具）
+   ✅ 允许对单张图片调用：
+      - mcp__atlassian__download_attachment(attachment_id)         ← Jira 附件
+      - mcp__atlassian__download_confluence_attachment(attachmentUrl) ← Confluence 图片
+
+   注意：Confluence 图片 URL 需要 Atlassian 认证，WebFetch 无法访问（会得到 302 重定向），必须用 MCP 工具下载。
+
+   5a. Jira 直接附件
    attachments = issue.fields.attachment
    imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
 
    if (imageAttachments.length > 0) {
-     for each img in imageAttachments:
+     for each img in imageAttachments (最多处理前 3 张):
        try {
-         // img.content 是带认证的 Jira 图片 URL，WebFetch 可直接访问
-         analysis = WebFetch(img.content, prompt: "Describe this UI screenshot in detail: layout, components, error messages, annotations.")
+         binary = mcp__atlassian__download_attachment(attachment_id: img.id)
+         tempFile = "/tmp/jira-img-" + img.id + ".png"
+         Write file: tempFile, content: binary
+         analysis = Read(tempFile) → 视觉分析，描述：UI 问题位置、错误信息、设计标注
+         Bash: rm -f tempFile
          attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
        } catch (e) {
          attachmentAnalysis.push("[" + img.filename + "]: 图片无法加载")
@@ -94,10 +101,13 @@ try {
    confluenceImageUrls = 从 issue.description 中提取所有匹配 /!([^!|]+?\.(?:png|jpg|jpeg|gif|webp))[|!]/i 的 URL
 
    if (confluenceImageUrls.length > 0) {
-     for each imgUrl in confluenceImageUrls:
+     for each imgUrl in confluenceImageUrls (最多处理前 3 张):
        try {
-         // 直接 WebFetch，不调用任何 MCP 二进制下载工具
-         analysis = WebFetch(imgUrl, prompt: "Describe this UI screenshot or design image in detail for a developer: layout, components, text, interactions.")
+         binary = mcp__atlassian__download_confluence_attachment(attachmentUrl: imgUrl)
+         tempFile = "/tmp/confluence-img-" + Date.now() + ".png"
+         Write file: tempFile, content: binary
+         analysis = Read(tempFile) → 视觉分析，描述：UI 布局、组件、文字、交互
+         Bash: rm -f tempFile
          attachmentAnalysis.push("[Confluence Image]: " + analysis)
        } catch (e) {
          attachmentAnalysis.push("[Confluence Image]: 图片无法加载，URL: " + imgUrl)
@@ -238,4 +248,5 @@ if (state/jira-context.json 存在) {
 | 权限不足 | 确认邮箱有访问 Jira 项目权限 |
 | 回写失败 | 记录警告，不阻塞流程完成 |
 | Confluence 图片下载失败 | 检查 token 是否有 Confluence 访问权限 |
-| `Request too large (max 20MB)` | 禁止调用 `get_page_images` / `get_content_attachments` / `download_confluence_attachment`，改用 WebFetch 直接读 URL |
+| `Request too large (max 20MB)` | 禁止调用 `get_page_images` / `get_content_attachments`（批量）；单张图片改用 `download_confluence_attachment(attachmentUrl)` |
+| Confluence 图片 WebFetch 返回 302 | Confluence URL 需认证，WebFetch 无 token，必须用 `download_confluence_attachment` MCP 工具 |
