@@ -57,66 +57,28 @@ if (args.length === 0) {
 ### Jira URL 檢測（在上述解析後執行）
 
 ```
-// 檢測 requirement 是否為 Jira URL
-jiraIssueKey = null
-
+// Jira URL 檢測
 if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
-  jiraIssueKey = 匹配到的 issue key（如 TRNSCN-2539）
+  // 調用統一的 Jira 處理中心
+  result = Skill: jira-mcp-setup (
+    action: "get_issue",
+    url: requirement,
+    mode: "autopilot"
+  )
 
-  // 使用 MCP 拉取 ticket 詳情
-  issue = mcp__atlassian__jira_get_issue(issueKey: jiraIssueKey)
+  requirement = result.requirement
 
-  // 將 ticket 的 summary + description 作為需求描述
-  requirement = issue.summary + "\n" + issue.description（純文本部分）
-
-  // 拉取並分析 Jira 附件中的圖片
-  try {
-    attachments = issue.fields.attachment（數組，每項含 filename / mimeType / content URL）
-
-    imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
-
-    if (imageAttachments.length > 0) {
-      attachmentAnalysis = []
-
-      for each img in imageAttachments:
-        // 使用 WebFetch 下載圖片（Atlassian MCP content 字段為帶 Bearer token 的直鏈）
-        // Claude 是多模態模型，可直接對圖片進行視覺分析
-        imageContent = WebFetch(img.content)
-
-        analysis = 對圖片進行視覺分析，重點描述：
-          - UI 問題位置（如：「右上角按鈕文字截斷」）
-          - 錯誤信息 / 異常狀態（如：「紅色 toast 顯示 500 錯誤」）
-          - 設計稿標注（如：「藍色框標記的輸入框邊框顏色不符」）
-          - 整體頁面結構（如適用）
-
-        attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
-
-      requirement += "\n\n[Jira 附件圖片分析]\n" + attachmentAnalysis.join("\n")
-    }
-  } catch (e) {
-    // 附件拉取失敗不阻塞主流程，記錄警告後繼續
-    console.warn("Jira 附件拉取失敗，跳過圖片分析：" + e.message)
-  }
-
-  // 根據 issue type 自動選擇 mode（如未明確指定）
-  if (issue.type in ['故障', 'Bug', 'bug']) {
+  // 根據 issue type 自動選擇 mode
+  if (result.context.issueType in ['故障', 'Bug', 'bug']) {
     mode = 'hotfix'
-  } else if (issue.type in ['Story', 'Task', '任務']) {
+  } else if (result.context.issueType in ['Story', 'Task', '任務']) {
     mode = 'feature'
   }
   // 否則保持 mode = 'greenfield'
-
-  // 持久化 Jira 上下文，供 DONE 階段回寫使用
-  Write state/jira-context.json:
-  {
-    "issueKey": jiraIssueKey,
-    "issueUrl": 原始 URL,
-    "mode": mode
-  }
 }
 ```
 
-> **注意**：若 `mcp__atlassian__jira_get_issue` 不可用（未配置 Atlassian MCP），跳過 Jira 拉取，將原始 URL 作為 requirement 繼續執行，並提示用戶配置 MCP。
+> **注意**：所有 Jira 處理邏輯已封裝在 `jira-mcp-setup` skill 中，autopilot 只調用統一入口。
 
 ## 路徑解析（必須最優先執行）
 
@@ -484,26 +446,20 @@ HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 
 // Jira 回寫（如果本次流程來源於 Jira ticket）
 if (state/jira-context.json 存在) {
-  Read state/jira-context.json → { issueKey, issueUrl }
+  // 收集元數據供回寫使用
+  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"
 
-  // 1. 收集修復元數據
-  fixer = "Claude Autopilot Agent"     // 修復人固定為 AI 代理標識
-  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"  // 修復時間
-
-  // 2. 添加評論：總結本次完成的工作
-  comment = 生成摘要，格式如下：
-    **修復人**：{fixer}
-    **修復時間**：{fixTime}
-    ---
-    - 完成的主要功能/修復點（來自 docs/prd.md 或 docs/test-report.md）
-    - 主要改動文件（如有 docs/code-review.md 則引用）
-    - 測試結果（如有 docs/test-report.md）
-
-  mcp__atlassian__jira_add_comment(issueKey, comment)
-
-  // 2. 推進狀態：轉到下一個可用狀態
-  // 先獲取可用 transitions，選擇最接近「完成/提測」的狀態
-  mcp__atlassian__jira_transition_issue(issueKey, targetStatus)
+  Skill: jira-mcp-setup (
+    action: "write_back",
+    context: {
+      issueKey: jiraIssueKey,
+      issueUrl: jiraIssueUrl,
+      mode: "autopilot",
+      fixTime: fixTime,
+      changes: [摘要列表],
+      testResult: "通過/失敗"
+    }
+  )
 }
 
 🎉 流程完成！
