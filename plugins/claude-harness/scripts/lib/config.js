@@ -382,94 +382,9 @@ const AGENT_TEAMS_CONFIG = {
   // 官方环境变量（设置为 "1" 启用）
   ENV_FLAG: 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
 
-  // ── 路径 A：Agent Teams 原生工具调用模板 ────────────────────────────────
-  // [DEPRECATED v14.3] 并行 FE+BE 调度模板
-  // DESIGN_REVIEW 阶段已改为 fullstack-engineer 单 Agent，无需 Team 调度
-  // 本模板仅保留向后兼容，generate-team-dispatch 命令已标记废弃
-
-  NATIVE_TEAM_NAME: 'fe-be-impl',  // ~/.claude/teams/fe-be-impl/ (deprecated)
-
-  // [DEPRECATED v14.3] — DESIGN_REVIEW 现在用 fullstack-engineer 单 Agent
-  NATIVE_DISPATCH_TEMPLATE: `
-## ⚠️  [DEPRECATED v14.3] 本模板已废弃
-
-DESIGN_REVIEW 阶段现在由 fullstack-engineer 单 Agent 实现，无需并行团队调度。
-以下内容仅保留历史参考。Orchestrator 请直接派发 fullstack-engineer。
-
----
-
-## Agent Teams 原生调度（CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 已启用）
-
-Orchestrator 在 DESIGN_REVIEW 阶段执行以下步骤：
-
-### Step 1：创建团队
-
-\`\`\`
-TeamCreate({
-  "name": "fe-be-impl",
-  "description": "FE + BE 并行实现团队，负责 DESIGN_REVIEW → IMPLEMENTATION 阶段"
-})
-\`\`\`
-
-### Step 2：创建 BE 任务（先于 FE，因为 FE 依赖 api-spec）
-
-\`\`\`
-TaskCreate({
-  "subject": "BE：实现后端 API",
-  "description": "读 docs/traceability-matrix.md 确认 BE 负责的 API 范围。\\n执行 env-check 模块 B。\\n先写 docs/api-spec.md（v1.0），用 SendMessage 通知 FE teammate。\\n运行 node scripts/workflow.js validate-doc api-spec 验证。\\n实现所有路由后运行 node scripts/workflow.js update-progress BE true。\\n如接口有变更，更新版本号并再次 SendMessage 通知 FE。",
-  "activeForm": "实现后端 API..."
-})
-\`\`\`
-
-### Step 3：创建 FE 任务（依赖 BE 的 api-spec 就绪）
-
-\`\`\`
-TaskCreate({
-  "subject": "FE：实现前端功能",
-  "description": "读 docs/traceability-matrix.md 确认 FE 负责的功能范围，将条目更新为 🔧。\\n等待 BE teammate 的 SendMessage 通知（api-spec v1.0 就绪）后开始实现。\\n执行 env-check 模块 C。\\n对照 design/ 设计稿实现，以 design/baseline/ 为视觉基准。\\n如发现接口问题，用 SendMessage 告知 BE teammate（不要写文件）。\\n完成后运行 node scripts/workflow.js update-progress FE true。",
-  "activeForm": "实现前端功能..."
-})
-\`\`\`
-注意：FE 任务无需设 blockedBy——FE teammate 会等待 BE 发来的 SendMessage 再开始，
-不需要 TaskList 层面的硬依赖（保持并行调度灵活性）。
-
-### Step 4：BE→FE 通知 api-spec 就绪（BE teammate 执行）
-
-\`\`\`
-SendMessage({
-  "to": "fe-impl",          // FE teammate 的 agent_id
-  "text": "api-spec v1.0 已写入 docs/api-spec.md。端点列表：\\n- POST /api/xxx\\n- GET /api/xxx/:id\\n可以开始前端实现。",
-  "summary": "api-spec v1.0 就绪"
-})
-\`\`\`
-
-### Step 5：FE→BE 通知接口问题（FE teammate 执行，如有需要）
-
-\`\`\`
-SendMessage({
-  "to": "be-impl",          // BE teammate 的 agent_id
-  "text": "接口问题：POST /api/xxx 响应缺少 createdAt 字段，FE 列表需要显示时间。建议：在响应 schema 中添加 createdAt: string（ISO 8601）。",
-  "summary": "POST /api/xxx 响应缺少 createdAt"
-})
-\`\`\`
-
-### Step 6：Orchestrator 等待双方完成
-
-轮询 TaskList 直到两个 Task 均为 completed：
-\`\`\`
-TaskList({ "filter": "in_progress" })
-// 当结果为空时，双方均已完成
-\`\`\`
-
-然后执行：
-\`\`\`bash
-node scripts/workflow.js check-parallel-done && node scripts/workflow.js advance
-\`\`\`
-`.trim(),
-
   // ── 路径 B：文件轮询降级通道 ──────────────────────────────────────────────
-  // Agent Teams 禁用时，FE/BE 通过此文件 append-only 传递变更通知
-  // 格式：简单的 Markdown，无消息 ID，无已读状态，保持最简单
+  // DESIGN_REVIEW 阶段已改为 fullstack-engineer 单 Agent，无需 Agent Teams 调度
+  // FALLBACK_CHANNEL_FILE 和 FALLBACK_FORMAT_GUIDE 保留，用于通用文件通知
   FALLBACK_CHANNEL_FILE: '.claude/review-notes.md',
 
   // 路径 B 的消息写入规范（给 Orchestrator/FE/BE Agent 看的格式说明）
@@ -482,7 +397,7 @@ FE 请在继续实现前重读 docs/api-spec.md。
 
 ---
 
-## [时间戳] FROM: fe → BE 通知  
+## [时间戳] FROM: fe → BE 通知
 接口问题：POST /users 响应缺少 createdAt 字段。
 建议：添加 createdAt: string (ISO 8601)。
 
@@ -670,8 +585,6 @@ const AGENT_MODEL_MAP = {
   'ux-designer':        'TIER_HEAVY',
   'plan-ceo-review':     'TIER_STANDARD',  // [v1.0.2 P1.1修复] CEO审视分 < 6 会触发整轮回滚（PM+Arch重做），需要Sonnet质量保障
   'fullstack-engineer':   'TIER_STANDARD',  // [v1.0.3] 合并 FE+BE，消除接口漂移
-  'frontend-engineer':    'TIER_STANDARD',  // [deprecated] 保留向后兼容，推荐使用 fullstack-engineer
-  'backend-engineer':     'TIER_STANDARD',  // [deprecated] 保留向后兼容，推荐使用 fullstack-engineer
   'code-reviewer':      'TIER_STANDARD',
   'qa-engineer':        'TIER_STANDARD',
   'devops-engineer':    'TIER_STANDARD',
@@ -706,7 +619,6 @@ const GLOBAL_INSTALL_CONFIG = {
   GLOBAL_AGENTS: [
     'agents/pm.md', 'agents/architect.md', 'agents/designer.md',
     'agents/fullstack.md',                 // [v1.0.3] 主实现 agent，替代并行 fe+be
-    'agents/fe.md', 'agents/be.md',        // [deprecated] 保留向后兼容
     'agents/reviewer.md',
     'agents/qa.md', 'agents/security-auditor.md', 'agents/devops.md',
     'agents/orchestrator.md', 'agents/general.md',
@@ -771,14 +683,6 @@ const AGENT_WRITE_PERMISSIONS = {
       'package.json',
     ],
     reason: '全栈工程师写代码、API 规范和追溯矩阵',
-  },
-  'frontend-engineer': {
-    allowedPaths: ['apps/web/', 'docs/traceability-matrix.md'],
-    reason: '[deprecated] 前端工程师只写前端代码',
-  },
-  'backend-engineer': {
-    allowedPaths: ['apps/server/', 'docs/api-spec.md', 'docs/traceability-matrix.md'],
-    reason: '[deprecated] 后端工程师只写后端代码和 API 规范',
   },
   'code-reviewer': {
     allowedPaths: ['docs/code-review.md'],

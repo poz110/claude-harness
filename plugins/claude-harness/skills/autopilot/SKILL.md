@@ -54,11 +54,12 @@ if (args.length === 0) {
 }
 ```
 
-### Jira URL 檢測（在上述解析後執行）
+### Jira URL 檢測（調用統一的 jira-mcp-setup skill）
 
 ```
-// Jira URL 檢測
+// 檢測 requirement 是否為 Jira URL
 if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
+
   // 調用統一的 Jira 處理中心
   result = Skill: jira-mcp-setup (
     action: "get_issue",
@@ -67,18 +68,11 @@ if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
   )
 
   requirement = result.requirement
-
-  // 根據 issue type 自動選擇 mode
-  if (result.context.issueType in ['故障', 'Bug', 'bug']) {
-    mode = 'hotfix'
-  } else if (result.context.issueType in ['Story', 'Task', '任務']) {
-    mode = 'feature'
-  }
-  // 否則保持 mode = 'greenfield'
+  // jira-context.json 已由 skill 寫入
 }
 ```
 
-> **注意**：所有 Jira 處理邏輯已封裝在 `jira-mcp-setup` skill 中，autopilot 只調用統一入口。
+> **注意**：若 Atlassian MCP 未配置，`Skill: jira-mcp-setup` 會降級返回原始 URL 作為 requirement，並提示用戶配置 MCP。
 
 ## 路徑解析（必須最優先執行）
 
@@ -446,20 +440,26 @@ HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 
 // Jira 回寫（如果本次流程來源於 Jira ticket）
 if (state/jira-context.json 存在) {
-  // 收集元數據供回寫使用
-  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"
+  Read state/jira-context.json → { issueKey, issueUrl }
 
-  Skill: jira-mcp-setup (
-    action: "write_back",
-    context: {
-      issueKey: jiraIssueKey,
-      issueUrl: jiraIssueUrl,
-      mode: "autopilot",
-      fixTime: fixTime,
-      changes: [摘要列表],
-      testResult: "通過/失敗"
-    }
-  )
+  // 1. 收集修復元數據
+  fixer = "Claude Autopilot Agent"     // 修復人固定為 AI 代理標識
+  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"  // 修復時間
+
+  // 2. 添加評論：總結本次完成的工作
+  comment = 生成摘要，格式如下：
+    **修復人**：{fixer}
+    **修復時間**：{fixTime}
+    ---
+    - 完成的主要功能/修復點（來自 docs/prd.md 或 docs/test-report.md）
+    - 主要改動文件（如有 docs/code-review.md 則引用）
+    - 測試結果（如有 docs/test-report.md）
+
+  mcp__atlassian__jira_add_comment(issueKey, comment)
+
+  // 2. 推進狀態：轉到下一個可用狀態
+  // 先獲取可用 transitions，選擇最接近「完成/提測」的狀態
+  mcp__atlassian__jira_transition_issue(issueKey, targetStatus)
 }
 
 🎉 流程完成！

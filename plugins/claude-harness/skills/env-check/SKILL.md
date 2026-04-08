@@ -392,8 +392,8 @@ start_local_postgres() {
   fi
 
   # 运行 migration
-  if [ -f "apps/server/package.json" ]; then
-    cd apps/server
+  if [ -n "$BE_DIR" ] && [ -f "${BE_DIR}/package.json" ]; then
+    cd "$BE_DIR"
     bun run db:push 2>/dev/null || \
     bun run drizzle-kit push 2>/dev/null || \
     echo "⚠️  请手动运行数据库迁移"
@@ -421,7 +421,9 @@ start_local_redis() {
 
 # 安装依赖
 install_deps() {
-  cd apps/server
+  _target_dir="${BE_DIR:-apps/server}"
+  cd "$_target_dir"
+  echo "正在安装依赖: $_target_dir/"
   if command -v bun &>/dev/null; then
     bun install && echo "✅ 依赖安装成功（bun）"
   else

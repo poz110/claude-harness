@@ -54,69 +54,25 @@ if (args.length === 0) {
 }
 ```
 
-### Jira URL 檢測（在上述解析後執行）
+### Jira URL 檢測（調用統一的 jira-mcp-setup skill）
 
 ```
 // 檢測 requirement 是否為 Jira URL
-jiraIssueKey = null
-
 if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
-  jiraIssueKey = 匹配到的 issue key（如 TRNSCN-2539）
 
-  // 使用 MCP 拉取 ticket 詳情
-  issue = mcp__atlassian__jira_get_issue(issueKey: jiraIssueKey)
+  // 調用統一的 Jira 處理中心
+  result = Skill: jira-mcp-setup (
+    action: "get_issue",
+    url: requirement,
+    mode: "autopilot"
+  )
 
-  // 將 ticket 的 summary + description 作為需求描述
-  requirement = issue.summary + "\n" + issue.description（純文本部分）
-
-  // 拉取並分析 Jira 附件中的圖片
-  try {
-    attachments = issue.fields.attachment（數組，每項含 filename / mimeType / content URL）
-
-    imageAttachments = attachments.filter(a => a.mimeType.startsWith('image/'))
-
-    if (imageAttachments.length > 0) {
-      attachmentAnalysis = []
-
-      for each img in imageAttachments:
-        // 使用 WebFetch 下載圖片（Atlassian MCP content 字段為帶 Bearer token 的直鏈）
-        // Claude 是多模態模型，可直接對圖片進行視覺分析
-        imageContent = WebFetch(img.content)
-
-        analysis = 對圖片進行視覺分析，重點描述：
-          - UI 問題位置（如：「右上角按鈕文字截斷」）
-          - 錯誤信息 / 異常狀態（如：「紅色 toast 顯示 500 錯誤」）
-          - 設計稿標注（如：「藍色框標記的輸入框邊框顏色不符」）
-          - 整體頁面結構（如適用）
-
-        attachmentAnalysis.push("[" + img.filename + "]: " + analysis)
-
-      requirement += "\n\n[Jira 附件圖片分析]\n" + attachmentAnalysis.join("\n")
-    }
-  } catch (e) {
-    // 附件拉取失敗不阻塞主流程，記錄警告後繼續
-    console.warn("Jira 附件拉取失敗，跳過圖片分析：" + e.message)
-  }
-
-  // 根據 issue type 自動選擇 mode（如未明確指定）
-  if (issue.type in ['故障', 'Bug', 'bug']) {
-    mode = 'hotfix'
-  } else if (issue.type in ['Story', 'Task', '任務']) {
-    mode = 'feature'
-  }
-  // 否則保持 mode = 'greenfield'
-
-  // 持久化 Jira 上下文，供 DONE 階段回寫使用
-  Write state/jira-context.json:
-  {
-    "issueKey": jiraIssueKey,
-    "issueUrl": 原始 URL,
-    "mode": mode
-  }
+  requirement = result.requirement
+  // jira-context.json 已由 skill 寫入
 }
 ```
 
-> **注意**：若 `mcp__atlassian__jira_get_issue` 不可用（未配置 Atlassian MCP），跳過 Jira 拉取，將原始 URL 作為 requirement 繼續執行，並提示用戶配置 MCP。
+> **注意**：若 Atlassian MCP 未配置，`Skill: jira-mcp-setup` 會降級返回原始 URL 作為 requirement，並提示用戶配置 MCP。
 
 ## 路徑解析（必須最優先執行）
 
