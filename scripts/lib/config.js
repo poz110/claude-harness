@@ -773,11 +773,11 @@ const HOTFIX_SKIP_STATES = ['ARCH_REVIEW', 'CEO_REVIEW', 'DESIGN_PHASE', 'DESIGN
 
 // Hotfix 模式下的 PRD 前置条件（只要求目标 PRD 文件存在）
 const HOTFIX_PREREQS = {
-  PRD_REVIEW:     ['docs/prd.md'],
-  CODE_REVIEW:    ['docs/code-review.md'],
-  QA_PHASE:       ['docs/test-plan.md', 'docs/test-report.md'],
+  PRD_REVIEW:      ['docs/prd.md'],
+  // CODE_REVIEW: code-reviewer generates code-review.md DURING this state, not before entering
+  QA_PHASE:        ['docs/test-plan.md', 'docs/test-report.md'],
   SECURITY_REVIEW: ['docs/security-report.md'],
-  DEPLOY_PREP:    ['docs/deploy-plan.md', 'docs/runbook.md'],
+  DEPLOY_PREP:     ['docs/deploy-plan.md', 'docs/runbook.md'],
 }
 
 // ─── [v1.0.1] Autopilot 模式 ────────────────────────────────────────────────

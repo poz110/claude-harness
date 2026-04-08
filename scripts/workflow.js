@@ -499,14 +499,27 @@ async function main() {
         if (!isManual) {
           const nextTarget = TRANSITIONS[state.currentState]?.next
           if (nextTarget) {
-            const prereqCheck = checkPrereqs(nextTarget)
+            // [v1.5.1] In skip modes, check prereqs for actual destination, not skipped states
+            const _skipStates = state.mode === 'hotfix' ? HOTFIX_SKIP_STATES
+                              : state.mode === 'feature' ? FEATURE_SKIP_STATES : null
+            let checkTarget = nextTarget
+            if (_skipStates && _skipStates.includes(nextTarget)) {
+              let t = nextTarget
+              while (_skipStates.includes(t)) {
+                const _next = TRANSITIONS[t]?.next
+                if (!_next) break
+                t = _next
+              }
+              checkTarget = t
+            }
+            const prereqCheck = checkPrereqs(checkTarget)
             if (!prereqCheck.ok) {
               appendTrace({
                 type: 'prereq_block',
-                payload: { from: state.currentState, to: nextTarget, missing: prereqCheck.missing },
+                payload: { from: state.currentState, to: checkTarget, missing: prereqCheck.missing },
               }, state)
               console.error(`\n🚫 [harness gate] 無法推進：前置條件未滿足`)
-              console.error(`   ${state.currentState} → ${nextTarget}`)
+              console.error(`   ${state.currentState} → ${checkTarget}`)
               prereqCheck.missing.forEach(f => {
                 console.error(`   缺失：${f}`)
                 const hint = PREREQ_HINTS[f]
