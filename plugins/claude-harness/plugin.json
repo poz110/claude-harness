@@ -1,7 +1,7 @@
 {
   "name": "claude-harness",
   "description": "claude-harness - A state machine driven multi-agent development workflow with 12 specialized agents (PM, Architect, Designer, FullStack, Reviewer, QA, Security, DevOps, etc.)",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "author": {
     "name": "Snow.Li"
   },
