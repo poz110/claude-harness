@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * workflow.js — v14.0
+ * workflow.js — v14.1
  *
  * v14.0 核心改造：完整解决 P0 + P1 架构问题
  *
@@ -587,6 +587,7 @@ async function main() {
 
         // 如果有需求描述，寫入注入文件
         if (requirement && requirement.trim()) {
+          if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true })
           const requirementPath = path.join(STATE_DIR, 'autopilot-requirement.md')
           const content = `# Autopilot 初始需求
 
