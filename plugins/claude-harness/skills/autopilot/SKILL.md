@@ -54,6 +54,41 @@ if (args.length === 0) {
 }
 ```
 
+### Jira URL 檢測（在上述解析後執行）
+
+```
+// 檢測 requirement 是否為 Jira URL
+jiraIssueKey = null
+
+if (requirement matches /atlassian\.net\/browse\/([A-Z]+-\d+)/) {
+  jiraIssueKey = 匹配到的 issue key（如 TRNSCN-2539）
+
+  // 使用 MCP 拉取 ticket 詳情
+  issue = mcp__atlassian__jira_get_issue(issueKey: jiraIssueKey)
+
+  // 將 ticket 的 summary + description 作為需求描述
+  requirement = issue.summary + "\n" + issue.description（純文本部分）
+
+  // 根據 issue type 自動選擇 mode（如未明確指定）
+  if (issue.type in ['故障', 'Bug', 'bug']) {
+    mode = 'hotfix'
+  } else if (issue.type in ['Story', 'Task', '任務']) {
+    mode = 'feature'
+  }
+  // 否則保持 mode = 'greenfield'
+
+  // 持久化 Jira 上下文，供 DONE 階段回寫使用
+  Write state/jira-context.json:
+  {
+    "issueKey": jiraIssueKey,
+    "issueUrl": 原始 URL,
+    "mode": mode
+  }
+}
+```
+
+> **注意**：若 `mcp__atlassian__jira_get_issue` 不可用（未配置 Atlassian MCP），跳過 Jira 拉取，將原始 URL 作為 requirement 繼續執行，並提示用戶配置 MCP。
+
 ## 路徑解析（必須最優先執行）
 
 **每次執行 Autopilot 的第一個 Bash 命令必須是路徑解析：**
@@ -417,6 +452,30 @@ HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 ```
 [Autopilot 自動推進]
 HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
+
+// Jira 回寫（如果本次流程來源於 Jira ticket）
+if (state/jira-context.json 存在) {
+  Read state/jira-context.json → { issueKey, issueUrl }
+
+  // 1. 收集修復元數據
+  fixer = "Claude Autopilot Agent"     // 修復人固定為 AI 代理標識
+  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"  // 修復時間
+
+  // 2. 添加評論：總結本次完成的工作
+  comment = 生成摘要，格式如下：
+    **修復人**：{fixer}
+    **修復時間**：{fixTime}
+    ---
+    - 完成的主要功能/修復點（來自 docs/prd.md 或 docs/test-report.md）
+    - 主要改動文件（如有 docs/code-review.md 則引用）
+    - 測試結果（如有 docs/test-report.md）
+
+  mcp__atlassian__jira_add_comment(issueKey, comment)
+
+  // 2. 推進狀態：轉到下一個可用狀態
+  // 先獲取可用 transitions，選擇最接近「完成/提測」的狀態
+  mcp__atlassian__jira_transition_issue(issueKey, targetStatus)
+}
 
 🎉 流程完成！
 ```
