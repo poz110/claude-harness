@@ -89,6 +89,26 @@ scripts/      — 工作流引擎（workflow.js + lib/）
 - **产出物指纹**：advance/rollback 后对关键文档计算 SHA256，跨状态修改触发警告
 - **Feature 模式**：`init-feature` 跳过 Arch/CEO/Design 阶段，适合增量开发
 
+## 版本管理
+
+**必须使用 `bump-version` 更新版本，禁止手动修改版本号。**
+
+```bash
+node scripts/bump-version.js <x.y.z>   # 例如：node scripts/bump-version.js 1.1.6
+```
+
+`bump-version` 会同步更新以下文件的版本号：
+- `package.json` → `version`
+- `plugins/claude-harness/plugin.json` → `version`
+- `.claude-plugin/marketplace.json` → `plugins[0].version`
+
+更新后提交并 push：
+```bash
+git add . && git commit -m "chore: bump to <version>" && git push
+```
+
+**注意**：如果只改 `package.json` 而不用 `bump-version`，marketplace 版本不会同步，导致其他用户安装时拿到旧文件。
+
 ## 模型配置
 
 修改 `scripts/lib/config.js` → `AGENT_MODEL_MAP`，然后 `node scripts/workflow.js install-global --force`
