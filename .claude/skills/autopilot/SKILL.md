@@ -250,49 +250,82 @@ Arguments: { "issue_key": "<issue_key>" }
   請在正確的項目目錄下重新執行。
   ```
 
-### Step 0.4 — 分析截圖（如有）
+### Step 0.4 — 分析截圖（**強制執行，不可跳過**）
 
-**如果 description 或 attachments 中有圖片，按以下方式處理：**
+> ⚠️ **此步驟為強制步驟。只要 description 或 attachments 中存在任何圖片 URL，必須全部下載並逐一分析，完成前禁止進入 Step 0.5。**
+>
+> 截圖往往包含文字描述沒有的關鍵信息（紅色標注、箭頭指示、對比截圖），是定位問題的核心依據。略過截圖 = 可能修錯地方。
+
+**收集所有圖片 URL：**
+
+從以下來源提取全部圖片 URL：
+1. `description` 中的 `!image.png!` 或 `![alt](url)` 格式
+2. `attachments` 數組中 `mimeType` 包含 `image` 的條目（取 `content` 字段 URL）
+3. Confluence 嵌入圖片：`/wiki/download/attachments/...` 格式的鏈接
 
 ⛔ **禁止**直接使用 `mcp__atlassian__jira_get_issue_images` 或類似工具。該方式會將 base64 圖片注入對話歷史，一旦圖片下載失敗（CloudFront 返回 HTML 重定向頁面），會導致 `400 Could not process image` 錯誤並污染對話歷史（Poisoned Context）。
 
-**正確方式：下載 → 驗證 → Read**
+**正確方式：下載 → 驗證 → Read（對每張圖片循環執行）**
 
 ```bash
 mkdir -p temp
-# 從項目根目錄的 .env 或 .env.local 加載 Jira 憑證
-export $(grep -E "JIRA_EMAIL|JIRA_API_TOKEN" .env.local 2>/dev/null | xargs)
-export $(grep -E "JIRA_EMAIL|JIRA_API_TOKEN" .env 2>/dev/null | xargs)
+# 加載 Jira 憑證（同時支持 .env 和 .env.local）
+export $(grep -E "JIRA_EMAIL|JIRA_API_TOKEN" .env.local 2>/dev/null | xargs 2>/dev/null)
+export $(grep -E "JIRA_EMAIL|JIRA_API_TOKEN" .env 2>/dev/null | xargs 2>/dev/null)
 
-# 下載圖片（--location-trusted 確保 http→https 重定向時保留 auth header）
-curl -L --location-trusted -f -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
-  "<image-url>" -o temp/jira-screenshot.png
+# --- 對每張圖片執行以下流程 ---
+# idx = 圖片序號（01, 02, 03 ...），url = 圖片完整 URL
+idx=01
+url="<image-url>"
+out="temp/jira-img-${idx}.png"
 
-# 驗證是否真的是圖片（防止保存了 HTML 錯誤頁）
-file_type=$(file -b temp/jira-screenshot.png 2>/dev/null)
+# 下載（--location-trusted 確保跨域重定向保留 auth header）
+curl -L --location-trusted -f -s \
+  -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+  "$url" -o "$out"
+
+# 驗證是否為真實圖片（防止保存了 HTML 錯誤頁）
+file_type=$(file -b "$out" 2>/dev/null)
 if echo "$file_type" | grep -qiE "PNG|JPEG|GIF|WebP|image"; then
-  echo "✅ Valid image: $file_type"
+  echo "✅ img-${idx}: 下載成功 ($file_type)"
 else
-  echo "⚠️ Download failed, not an image (got: $file_type) — skip image"
-  rm -f temp/jira-screenshot.png
+  echo "⚠️ img-${idx}: 下載失敗（得到: $file_type）— 跳過此圖"
+  rm -f "$out"
 fi
 ```
 
-驗證通過後用 `Read` 工具查看 `temp/jira-screenshot.png`。
+驗證通過後，對每張成功下載的圖片使用 `Read` 工具查看（`Read temp/jira-img-01.png`）。
 
-**分析截圖重點：**
-1. **紅色標注/框選區域**：問題所在位置
-2. **文字說明**：具體的問題描述或修復要求
-3. **對比分析**：當前狀態 vs 期望狀態
-4. **UI 元素定位**：根據截圖定位代碼位置
+**每張截圖必須分析以下四個維度：**
+
+1. **紅色標注 / 框選 / 箭頭**（最高優先級）：標出了哪個具體 UI 元素？指向了哪個區域？這是問題定位的直接線索。
+2. **文字說明**：截圖上是否疊加了說明文字？說了什麼？
+3. **Before / After 對比**：是否有兩張截圖對比？當前錯誤狀態 vs 期望正確狀態分別是什麼？
+4. **UI 元素定位**：截圖中涉及哪個頁面、哪個組件、哪個按鈕/輸入框/狀態？對應到代碼的哪個文件？
+
+**分析完所有截圖後，輸出摘要：**
+
+```
+📸 截圖分析結果：
+  圖片 01：[紅色標注描述] → 問題定位：[組件/文件名]
+  圖片 02：[說明] → ...
+  無法下載：[列出失敗的 URL]
+```
+
+如果所有圖片都下載失敗，輸出：
+```
+⚠️ 所有截圖下載失敗，僅依賴文字描述分析問題，可能存在定位偏差。
+```
 
 ### Step 0.5 — 整合需求描述
 
+> **前置條件：Step 0.4 必須已完成（即使所有圖片下載失敗，也要有明確的失敗聲明）。**
+
 結合以下信息生成完整需求描述：
 
-- Jira issue summary & description
-- **截圖中的紅色標注和文字說明**
-- 評論區的補充說明
+1. Jira issue summary & description（文字部分）
+2. **Step 0.4 的截圖分析結果**（紅色標注、問題定位、Before/After）
+3. 評論區的補充說明
 
 將最終需求描述寫入 `state/autopilot-requirement.md`（覆蓋），格式：
 
@@ -307,7 +340,22 @@ URL: <jira_base_url>/browse/<issue_key>
 <issue summary>
 
 ## Description
-<issue description + 截圖分析結果>
+<issue description>
+
+## Screenshot Analysis
+<!-- Step 0.4 分析結果，必填（無圖則寫 "無截圖"） -->
+<對每張截圖的分析，重點描述：
+  - 紅色標注/箭頭指向的具體 UI 元素
+  - 截圖中的文字說明
+  - Before/After 對比（如有）
+  - 定位到的代碼文件/組件名>
+
+## Problem Location
+<!-- 根據截圖 + 文字描述綜合判斷的問題定位 -->
+- 頁面/組件：<具體頁面名稱或組件>
+- 觸發條件：<什麼操作觸發了問題>
+- 問題現象：<當前錯誤行為>
+- 期望行為：<正確應該是什麼>
 
 ## Labels
 <labels>
