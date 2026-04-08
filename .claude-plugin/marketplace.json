@@ -9,7 +9,7 @@
       "name": "claude-harness",
       "source": "./plugins/claude-harness",
       "description": "claude-harness - 12 specialized agents for state-machine driven development",
-      "version": "1.4.2"
+      "version": "1.4.3"
     }
   ]
 }
