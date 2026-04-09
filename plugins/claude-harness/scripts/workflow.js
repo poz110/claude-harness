@@ -200,6 +200,14 @@ function handleQaFailure(state) {
   appendAgentLog({ agent: 'orchestrator', action: 'qa-failure', count: state.qaFailureCount })
 
   if (state.qaFailureCount >= 2) {
+    // feature/hotfix 模式下 ARCH_REVIEW 被跳過，回滾到那裡無意義
+    // 改為回滾到 IMPLEMENTATION 並重置計數，讓 fullstack-engineer 重新修復
+    if (state.mode === 'feature' || state.mode === 'hotfix') {
+      console.log(`\n⚠️  QA 连续失败 ${state.qaFailureCount} 次（${state.mode} 模式），回滚至 IMPLEMENTATION 重新修復`)
+      const { state: newState, cleaned } = rollback(state, 'IMPLEMENTATION')
+      newState.qaFailureCount = 0
+      return { state: newState, cleaned, escalated: false }
+    }
     console.log(`\n⚠️  QA 连续失败 ${state.qaFailureCount} 次，升级回滚至 ARCH_REVIEW`)
     const { state: newState, cleaned } = rollback(state, 'ARCH_REVIEW')
     newState.qaFailureCount = 0

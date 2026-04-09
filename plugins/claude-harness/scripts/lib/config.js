@@ -749,7 +749,7 @@ const TRACKED_ARTIFACT_FILES = [
 //   DESIGN_REVIEW — 無完整設計稿，設計由 FE/BE 協商完成
 //
 // 實際執行路徑：
-//   IDEA → PRD_DRAFT* → PRD_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE* → SECURITY_REVIEW → DONE
+//   IDEA → PRD_DRAFT* → PRD_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE* → SECURITY_REVIEW → DEPLOY_PREP_SETUP → DEPLOY_PREP* → DONE
 //
 // PM 在 feature 模式下應生成「功能 PRD」：
 //   - 範圍更窄（只描述本次新增/修改的功能）
@@ -827,12 +827,13 @@ const AUTOPILOT_SKIP_INTERACTIONS = {
 
 // Feature 模式下放寬的前置條件（IMPLEMENTATION 不要求 interaction-spec.md）
 const FEATURE_PREREQS = {
-  PRD_REVIEW:     ['docs/prd.md'],
-  IMPLEMENTATION: ['docs/prd.md', 'docs/api-spec.md', 'docs/traceability-matrix.md'],
-  CODE_REVIEW:    ['docs/code-review.md'],
-  QA_PHASE:       ['docs/test-plan.md', 'docs/test-report.md'],
-  SECURITY_REVIEW: ['docs/security-report.md'],
-  DEPLOY_PREP:    ['docs/deploy-plan.md', 'docs/runbook.md'],
+  PRD_REVIEW:        ['docs/prd.md'],
+  IMPLEMENTATION:    ['docs/prd.md', 'docs/api-spec.md', 'docs/traceability-matrix.md'],
+  CODE_REVIEW:       ['docs/code-review.md'],
+  QA_PHASE:          ['docs/test-plan.md', 'docs/test-report.md'],
+  SECURITY_REVIEW:   ['docs/security-report.md'],
+  DEPLOY_PREP_SETUP: [],  // devops-engineer 在此階段生成 deploy-plan + runbook，入口無前置
+  DEPLOY_PREP:       ['docs/deploy-plan.md', 'docs/runbook.md'],
 }
 
 // ─── [v1.0.2 P1.3] Config Self-Validation ─────────────────────────────────────
