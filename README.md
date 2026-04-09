@@ -1,4 +1,4 @@
-# claude-harness
+# claude-harness &nbsp; [![中文](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red.svg)](README.md) [![English](https://img.shields.io/badge/lang-English-blue.svg)](README_EN.md)
 
 基于 Claude Code Subagents 的多 Agent 协作开发工作流系统。12 个专职 Agent 通过 14 步状态机串联，从需求到部署全自动。
 
