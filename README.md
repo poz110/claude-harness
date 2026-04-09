@@ -1,6 +1,6 @@
-# claude-harness &nbsp; [![中文](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red.svg)](README.md) [![English](https://img.shields.io/badge/lang-English-blue.svg)](README_EN.md)
+# claude-harness &nbsp; [![中文](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red.svg)](README_ZH.md) [![English](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
 
-基于 Claude Code Subagents 的多 Agent 协作开发工作流系统。12 个专职 Agent 通过 14 步状态机串联，从需求到部署全自动。
+A multi-agent collaborative development workflow powered by Claude Code Subagents. 12 specialized agents orchestrated through a 14-step state machine — from requirements to deployment, fully automated.
 
 <div align="center">
 
@@ -16,32 +16,33 @@
 
 ---
 
-## 特性
+## Features
 
-- **12 个专职 Agent** — PM、架构师、设计师、全栈工程师、评审、QA、安全、DevOps 等
-- **14 步状态流水线** — 想法 → PRD → 架构 → 设计 → 实现 → QA → 安全 → 部署
-- **Autopilot 模式** — 全自动工作流，说出需求即可驱动全流程
-- **3 种工作模式** — `/autopilot`（全流程）、`/feature`（增量功能）、`/hotfix`（快速修复）
-- **Context 预算** — 自动追踪和管理上下文使用
-- **存量项目适配** — 自动检测现有技术栈，不强制替换框架
+- **12 Specialized Agents** — PM, Architect, Designer, Fullstack Engineer, Reviewer, QA, Security, DevOps, and more
+- **14-Step Pipeline** — Idea → PRD → Architecture → Design → Implementation → QA → Security → Deploy
+- **Autopilot Mode** — Fully automated workflow, just describe your requirements
+- **3 Work Modes** — `/autopilot` (full pipeline), `/feature` (incremental), `/hotfix` (quick fix)
+- **Context Budget** — Automatic context tracking and management
+- **Existing Project Support** — Auto-detects your tech stack, never forces framework changes
 
-## 安装
+## Installation
 
-### 方式一：插件市场安装（推荐）
+### Option 1: Plugin Marketplace (Recommended)
 
-**1. 添加 marketplace 源**
+**1. Add the marketplace source**
 
 ```bash
 claude plugin marketplace add poz110/claude-harness
 ```
-**2. 安装插件**
+
+**2. Install the plugin**
 
 ```bash
 claude plugin install claude-harness
 ```
 
 > [!TIP]
-> 作者发布新版本后，运行以下命令更新：
+> To update when a new version is released:
 > ```bash
 > claude plugin marketplace remove claude-harness
 > rm -rf ~/.claude/plugins/cache/claude-harness
@@ -49,22 +50,22 @@ claude plugin install claude-harness
 > claude plugin install claude-harness
 > ```
 
-安装完成后，所有命令即刻可用，包括 `/autopilot` 全流程自动模式。工作流状态写入当前项目目录的 `state/`，跨会话持久保存。
+Once installed, all commands are immediately available, including `/autopilot` for full automation. Workflow state is saved in your project's `state/` directory and persists across sessions.
 
-**安装后使用：**
+**Getting started:**
 
 ```bash
-# 1. 进入你的项目目录
+# 1. Navigate to your project directory
 cd your-project
 
-# 2. 用 dangerously-skip-permissions 模式启动 Claude（autopilot 需要自动执行命令）
+# 2. Start Claude in dangerously-skip-permissions mode (required for autopilot)
 claude --dangerously-skip-permissions
 
-# 3. 在 Claude 中输入
-/autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
+# 3. Type in Claude
+/autopilot Build a blog system with Markdown editing and tag categorization
 ```
 
-> **已有旧版本，需要更新？** marketplace 源不会自动同步，完整流程：
+> **Updating from an older version?** Marketplace sources don't auto-sync:
 > ```bash
 > claude plugin marketplace remove claude-harness
 > rm -rf ~/.claude/plugins/cache/claude-harness
@@ -72,94 +73,94 @@ claude --dangerously-skip-permissions
 > claude plugin install claude-harness
 > ```
 
-### 方式二：源码安装
+### Option 2: Source Installation
 
-适合需要修改工作流引擎本身，或贡献代码的场景。
+For modifying the workflow engine itself or contributing code.
 
 ```bash
 git clone https://github.com/poz110/claude-harness.git
 cd claude-harness
-node scripts/workflow.js init   # 将 agents/skills/hooks 安装到全局 ~/.claude/
-node scripts/workflow.js status # 验证安装
+node scripts/workflow.js init   # Install agents/skills/hooks to ~/.claude/
+node scripts/workflow.js status # Verify installation
 ```
 
 ---
 
-## 使用
+## Usage
 
-### Autopilot — 全自动流程
+### Autopilot — Fully Automated
 
 ```bash
-/autopilot 构建一个博客系统，支持 Markdown 写作和标签分类
-/feature 给现有系统添加用户头像上传功能
-/hotfix 修复登录页 CSRF token 漏洞
+/autopilot Build a blog system with Markdown editing and tag categorization
+/feature Add user avatar upload with cropping and compression
+/hotfix Fix the CSRF token vulnerability on the login page
 ```
 
-Autopilot 会自动调度所有 Agent，无需人工确认，直到项目完成。状态保存在当前目录 `state/workflow-state.json`，重启会话后可继续上次进度。
+Autopilot automatically dispatches all agents with no manual confirmation required until the project is complete. State is saved in `state/workflow-state.json` and can be resumed across sessions.
 
-**存量项目支持**：Autopilot 自动检测目标项目的现有技术栈（React/Vue/Ant Design/MUI/Tailwind 等），在 Architect / Designer / Fullstack 阶段以现有栈为准进行实现，不会强制引入新的框架或部署平台。
+**Existing project support**: Autopilot auto-detects your project's tech stack (React/Vue/Ant Design/MUI/Tailwind, etc.) and builds on top of it during the Architect / Designer / Fullstack phases — it will never force new frameworks or deployment platforms.
 
-### 三种工作模式
+### Three Work Modes
 
-| 模式 | 命令 | 适用场景 | 流程 |
-|------|------|---------|------|
-| **全流程** | `/autopilot <需求>` | 全新项目，完整生命周期 | 14 步全走 |
-| **增量功能** | `/feature <需求>` | 现有项目添加功能 | 跳过架构/设计，10 步 |
-| **快速修复** | `/hotfix <描述或Jira URL>` | 紧急 bug 修复 | 分析 → 修复 → 回写，3 步 |
+| Mode | Command | Use Case | Flow |
+|------|---------|----------|------|
+| **Full Pipeline** | `/autopilot <requirement>` | New projects, complete lifecycle | All 14 steps |
+| **Incremental** | `/feature <requirement>` | Add features to existing projects | Skips arch/design, 10 steps |
+| **Quick Fix** | `/hotfix <desc or Jira URL>` | Emergency bug fixes | Analyze → Fix → Writeback, 3 steps |
 
-### 独立技能命令（插件安装即可用）
+### Standalone Skill Commands (Available after plugin install)
 
 ```bash
-/generate-prd           # 生成产品需求文档
-/generate-design        # 创建设计系统
-/implement-feature      # 实现前端功能
-/implement-api          # 实现后端 API
-/arch-review            # 架构评审（生成 ADR）
-/code-review-arch       # 代码审查
-/owasp-scan             # OWASP 安全扫描
-/prepare-tests          # 生成测试计划和用例
-/setup-cicd             # 配置 CI/CD
-/monitor                # 启动监控面板
+/generate-prd           # Generate product requirements document
+/generate-design        # Create design system
+/implement-feature      # Implement frontend features
+/implement-api          # Implement backend API
+/arch-review            # Architecture review (generates ADR)
+/code-review-arch       # Code review
+/owasp-scan             # OWASP security scan
+/prepare-tests          # Generate test plans and cases
+/setup-cicd             # Configure CI/CD
+/monitor                # Launch monitoring dashboard
 ```
 
-### 工作流 CLI（需源码安装）
+### Workflow CLI (Requires source installation)
 
 ```bash
-node scripts/workflow.js status       # 查看当前状态
-node scripts/workflow.js advance      # 推进到下一阶段
-node scripts/workflow.js check        # 检查前置条件
-node scripts/workflow.js init-feature # 增量功能模式（跳过架构/设计）
+node scripts/workflow.js status       # View current state
+node scripts/workflow.js advance      # Advance to next stage
+node scripts/workflow.js check        # Check prerequisites
+node scripts/workflow.js init-feature # Incremental feature mode (skip arch/design)
 ```
 
 ---
 
-## 工作流状态机
+## Workflow State Machine
 
 ```
 IDEA → PRD_DRAFT* → PRD_REVIEW → ARCH_REVIEW → CEO_REVIEW* → DESIGN_PHASE*
      → DESIGN_REVIEW → IMPLEMENTATION → CODE_REVIEW → QA_PHASE*
      → SECURITY_REVIEW → DEPLOY_PREP_SETUP → DEPLOY_PREP* → DONE
 
-* = 人工确认节点（Autopilot 模式下自动通过）
+* = Manual confirmation node (auto-approved in Autopilot mode)
 ```
 
-| 状态 | Agent | 产出物 |
-|------|-------|--------|
+| State | Agent | Artifacts |
+|-------|-------|-----------|
 | `IDEA` | product-manager | `docs/prd.md` |
 | `PRD_REVIEW` | software-architect | `docs/arch-decision.md` |
 | `ARCH_REVIEW` | ux-designer | `DESIGN.md`, `docs/design-spec.md` |
 | `CEO_REVIEW` | plan-ceo-review | `docs/ceo-review.md` |
-| `DESIGN_REVIEW` | fullstack-engineer | `docs/api-spec.md`, 代码 |
+| `DESIGN_REVIEW` | fullstack-engineer | `docs/api-spec.md`, code |
 | `CODE_REVIEW` | qa-engineer | `docs/test-report.md` |
 | `SECURITY_REVIEW` | security-auditor | `docs/security-report.md` |
 | `DEPLOY_PREP_SETUP` | devops-engineer | `docs/deploy-plan.md`, `Dockerfile` |
 
 ---
 
-## 环境要求
+## Requirements
 
 - Node.js >= 18.0.0
-- Claude Code 最新版
+- Claude Code (latest)
 
 ## License
 
