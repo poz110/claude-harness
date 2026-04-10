@@ -45,16 +45,12 @@ description: "快速修復模式：徹底分析問題後直接寫修復代碼。
 1. 解析輸入
    input = 用戶輸入去除 "/hotfix" 後的部分
    isJira = input matches /atlassian\.net\/browse\/([A-Z]+-\d+)/
+   if (isJira) {
+     issueKey = 從 URL 提取的 key（如 TRNSCN-2982）
+   }
 
-2. IF isJira:
-   // 調用統一的 Jira 處理中心（負責 MCP 連接、ticket 獲取、圖片下載 + 視覺分析）
-   result = Skill: jira-mcp-setup (
-     action: "get_issue",
-     url: input,
-     mode: "hotfix"
-   )
-   problemDescription = result.requirement   // 含圖片分析結果
-   // state/jira-context.json 已由 jira-mcp-setup 寫入
+2. IF isJira → 執行 Jira Ticket 獲取（見下方「Jira Ticket 獲取流程」）
+   problemDescription = 獲取到的 requirement
 
 3. ELSE (純文字描述):
    problemDescription = input
@@ -90,6 +86,132 @@ description: "快速修復模式：徹底分析問題後直接寫修復代碼。
       C. 先用 /systematic-debugging 定位根因"
      等待用戶選擇
    }
+```
+
+---
+
+## ⛔ Jira Ticket 獲取流程（Phase 1 Step 2 的子流程）
+
+**當輸入是 Jira URL 時，必須嚴格按以下步驟執行。禁止跳過任何步驟，禁止自行發明替代流程，禁止直接問用戶"要不要手動描述"。**
+
+### Step A：嘗試 MCP 工具
+
+```
+try {
+  issue = mcp__atlassian__jira_get_issue(issueKey: issueKey)
+  // MCP 可用，直接使用返回的 issue 數據
+  method = "mcp"
+  → 跳到 Step C
+} catch (e) {
+  // MCP 不可用（工具不存在或 server 未啟動）
+  // ⛔ 不要停下來問用戶！繼續 Step B！
+}
+```
+
+### Step B：curl 兜底（⛔ 不可跳過）
+
+```
+// 讀取用戶的 MCP 配置文件，提取 Jira 憑證
+configRaw = Read("~/.claude/mcp.json")
+config = JSON.parse(configRaw)
+atlassian = config.mcpServers.atlassian
+
+if (atlassian && atlassian.env && atlassian.env.JIRA_URL && atlassian.env.JIRA_USERNAME && atlassian.env.JIRA_API_TOKEN) {
+  jiraUrl  = atlassian.env.JIRA_URL
+  username = atlassian.env.JIRA_USERNAME
+  token    = atlassian.env.JIRA_API_TOKEN
+
+  // 用 curl 獲取 issue（這是一條完整的 Bash 命令，直接執行）
+  issueJson = Bash: curl -sf -u "${username}:${token}" \
+    "${jiraUrl}/rest/api/3/issue/${issueKey}" \
+    -H "Accept: application/json"
+
+  method = "curl"
+  curlConfig = { jiraUrl, username, token,
+    confluenceUrl: atlassian.env.CONFLUENCE_URL || "",
+    confluenceUsername: atlassian.env.CONFLUENCE_USERNAME || username,
+    confluenceToken: atlassian.env.CONFLUENCE_API_TOKEN || token }
+  → 跳到 Step C
+}
+
+// ~/.claude/mcp.json 不存在或無 atlassian 配置 → 真正的未配置
+// 此時才可降級：用 URL 作為 problemDescription，Phase 3 跳過回寫
+problemDescription = input
+Write state/jira-context.json: { issueKey, issueUrl: input, mode: "hotfix", method: "none", mcpConfigured: false }
+→ 跳到 Phase 1 Step 4（結構化分析）
+```
+
+### Step C：提取需求文本
+
+```
+if (method == "mcp") {
+  summary = issue 的 summary
+  description = issue 的 description（純文本）
+}
+
+if (method == "curl") {
+  // REST API v3 的 description 是 ADF 格式，用 jq 提取純文本
+  summary = Bash: echo '${issueJson}' | jq -r '.fields.summary'
+  description = Bash: echo '${issueJson}' | jq -r \
+    '[.fields.description | .. | select(.type? == "text") | .text] | join(" ")' 2>/dev/null
+
+  // 如果 jq 失敗（jq 未安裝），降級用 grep 提取
+  if (description 為空) {
+    description = Bash: echo '${issueJson}' | grep -o '"text":"[^"]*"' | sed 's/"text":"//;s/"//' | head -50
+  }
+}
+
+requirement = summary + "\n" + description
+```
+
+### Step D：下載圖片附件並分析
+
+```
+if (method == "mcp") {
+  // MCP 路徑：用專用下載工具
+  try {
+    result = mcp__atlassian__jira_download_attachments(issue_key: issueKey)
+    analysis = 對每張圖片描述：UI 問題位置、錯誤信息、設計標注
+    requirement += "\n\n[圖片分析]\n" + analysis
+  } catch (e) {
+    // 圖片下載失敗不阻塞主流程
+  }
+}
+
+if (method == "curl") {
+  // curl 路徑：從 issue JSON 提取附件列表，curl 下載圖片，Read 分析
+  attachmentUrls = Bash: echo '${issueJson}' | jq -r \
+    '.fields.attachment[]? | select(.filename | test("\\.(png|jpg|jpeg|gif|webp)$"; "i")) | .content' | head -5
+
+  for each attachmentUrl:
+    filename = 從 URL 提取文件名
+    tmpPath = "/tmp/jira_hotfix_${filename}"
+    Bash: curl -sf -u "${username}:${token}" -o "${tmpPath}" "${attachmentUrl}" --max-time 30
+
+    if (下載成功) {
+      Read(tmpPath)    // Claude 多模態，可直接視覺分析圖片
+      analysis = 描述圖片：UI 問題、錯誤信息、需要修復的地方
+      requirement += "\n\n[圖片 ${filename}]\n" + analysis
+      Bash: rm -f "${tmpPath}"
+    }
+}
+```
+
+### Step E：保存 Jira 上下文
+
+```
+Write state/jira-context.json:
+{
+  "issueKey": issueKey,
+  "issueUrl": input,
+  "mode": "hotfix",
+  "method": method,         // "mcp" 或 "curl"
+  "mcpConfigured": true,
+  "curlConfig": method == "curl" ? curlConfig : null
+}
+
+problemDescription = requirement
+→ 繼續 Phase 1 Step 4（結構化分析）
 ```
 
 ---
@@ -144,9 +266,10 @@ description: "快速修復模式：徹底分析問題後直接寫修復代碼。
 1. 檢查 Jira 上下文
    Read state/jira-context.json
    if (文件不存在 OR mcpConfigured == false) {
-     // 非 Jira 來源 或 MCP 未配置，跳過
+     // 非 Jira 來源 或 連接不可用，跳過
      直接完成
    }
+   method = jiraContext.method   // "mcp" 或 "curl"
 
 2. 構建回寫 comment
    timestamp = Bash: date "+%Y-%m-%d %H:%M:%S %Z"
@@ -168,23 +291,53 @@ description: "快速修復模式：徹底分析問題後直接寫修復代碼。
    """
 
 3. 添加評論
-   mcp__atlassian__jira_add_comment(issueKey, comment)
+
+   if (method == "mcp") {
+     mcp__atlassian__jira_add_comment(issueKey, comment)
+   }
+
+   if (method == "curl") {
+     curlConfig = jiraContext.curlConfig
+     // 構建 ADF 格式的 comment body
+     Bash: curl -sf -u "${curlConfig.username}:${curlConfig.token}" \
+       -X POST "${curlConfig.jiraUrl}/rest/api/3/issue/${issueKey}/comment" \
+       -H "Content-Type: application/json" \
+       -d '{
+         "body": {
+           "type": "doc",
+           "version": 1,
+           "content": [{"type": "paragraph", "content": [{"type": "text", "text": "'"${comment}"'"}]}]
+         }
+       }'
+   }
 
 4. 轉移狀態
-   // 獲取可用 transitions
-   transitions = mcp__atlassian__jira_get_transitions(issueKey)
 
-   // 優先匹配順序（中英文）：
-   targetStatus = 從 transitions 中選擇第一個匹配：
-     "Done" / "完成" / "已完成"
-     "Fixed" / "已修復"
-     "提测" / "Ready for QA" / "In Review"
-     "Resolved" / "已解決"
-
-   if (targetStatus found) {
+   if (method == "mcp") {
+     transitions = mcp__atlassian__jira_get_transitions(issueKey)
+     targetStatus = 優先匹配：Done / 完成 / Fixed / 提测 / Ready for QA / Resolved
      mcp__atlassian__jira_transition_issue(issueKey, targetStatus)
-   } else {
-     告知用戶：「未找到匹配的完成狀態，已添加評論，請手動轉移 Jira ticket。」
+   }
+
+   if (method == "curl") {
+     curlConfig = jiraContext.curlConfig
+     transitionsJson = Bash: curl -sf -u "${curlConfig.username}:${curlConfig.token}" \
+       "${curlConfig.jiraUrl}/rest/api/3/issue/${issueKey}/transitions" \
+       -H "Accept: application/json"
+
+     // 從 transitions 中匹配目標狀態
+     targetNames = ["Done", "完成", "已完成", "Fixed", "已修復", "提测", "Ready for QA", "In Review", "Resolved", "已解決"]
+     targetId = Bash: echo '${transitionsJson}' | jq -r \
+       '.transitions[] | select(.name == "Done" or .name == "完成" or .name == "已完成" or .name == "Fixed" or .name == "已修復" or .name == "提测" or .name == "Ready for QA" or .name == "In Review" or .name == "Resolved" or .name == "已解決") | .id' | head -1
+
+     if (targetId 非空) {
+       Bash: curl -sf -u "${curlConfig.username}:${curlConfig.token}" \
+         -X POST "${curlConfig.jiraUrl}/rest/api/3/issue/${issueKey}/transitions" \
+         -H "Content-Type: application/json" \
+         -d '{"transition":{"id":"'"${targetId}"'"}}'
+     } else {
+       告知用戶：「未找到匹配的完成狀態，已添加評論，請手動轉移 Jira ticket。」
+     }
    }
 ```
 
@@ -226,14 +379,17 @@ description: "快速修復模式：徹底分析問題後直接寫修復代碼。
 
 | 場景 | 處理 |
 |------|------|
-| Jira MCP 未配置 | jira-mcp-setup 降級返回原始 URL 作為描述，Phase 3 跳過 |
-| Jira 圖片下載失敗 | jira-mcp-setup 內部處理，不阻塞主流程 |
+| MCP 不可用 + ~/.claude/mcp.json 有配置 | 自動用 curl 模式（Step B） |
+| MCP 不可用 + 無 mcp.json | 降級為 URL 作為描述，Phase 3 跳過 |
+| curl 返回 401 | Token 過期，告知用戶更新 ~/.claude/mcp.json 中的 JIRA_API_TOKEN |
+| Jira 圖片下載失敗 | 不阻塞主流程，繼續分析 |
 | 目標代碼文件 > 2MB | 用 Grep 定位行號，只 Read 目標段落 |
 | 構建/測試命令不存在 | 跳過驗證，繼續完成 |
 | 構建失敗（修復引入） | 分析錯誤 + 修復，最多 2 輪 |
 | 複雜度超出 hotfix 範圍 | Phase 1 門檻檢測，建議用戶切換模式 |
 | Jira 回寫失敗 | 記錄警告，不阻塞修復完成 |
 | Jira 狀態轉移無匹配 | 只添加 comment，提示用戶手動轉移 |
+| jq 未安裝 | 降級用 grep 提取文本 |
 
 ---
 
@@ -263,6 +419,8 @@ Jira：{issueKey} 已回寫評論 + 狀態已轉移為 {targetStatus}（僅 Jira
 - **不讀取或依賴 state/workflow-state.json**
 - **不派發任何 Agent**（主 Claude 直接執行全部工作）
 - **不跳過 Phase 1 分析**（即使問題看起來很簡單）
+- **不跳過 Jira Ticket 獲取流程的 Step B**（MCP 失敗後必須嘗試 curl）
+- **不在 MCP 失敗後直接問用戶"要不要手動描述"**（必須先試 curl）
 - **不 Read SVG sprite 文件**（改用 Grep）
 - **不 Read > 2MB 的任何文件**
 - **不在 dist/ build/ node_modules/ 目錄中搜索**
