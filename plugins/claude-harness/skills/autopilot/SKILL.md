@@ -439,27 +439,30 @@ HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 HARNESS_ROOT=$PWD node "$(cat /tmp/.harness_wf)" advance
 
 // Jira 回寫（如果本次流程來源於 Jira ticket）
+// 統一委派給 jira-mcp-setup，獲得 MCP/curl 雙通道保障
 if (state/jira-context.json 存在) {
-  Read state/jira-context.json → { issueKey, issueUrl }
+  Read state/jira-context.json
+  if (jiraContext.mcpConfigured) {
+    // 收集本次流程的完成信息
+    changes = []
+    if (docs/prd.md 存在) changes.push("完成 PRD 中定義的需求")
+    if (docs/code-review.md 存在) changes.push("代碼審查通過")
+    if (docs/test-report.md 存在) changes.push("測試結果: " + 從 test-report.md 提取摘要)
+    if (docs/security-report.md 存在) changes.push("安全審計通過")
 
-  // 1. 收集修復元數據
-  fixer = "Claude Autopilot Agent"     // 修復人固定為 AI 代理標識
-  fixTime = Bash: date "+%Y-%m-%d %H:%M:%S %Z"  // 修復時間
+    testResult = docs/test-report.md 存在 ? 從中提取通過/失敗摘要 : "未執行"
 
-  // 2. 添加評論：總結本次完成的工作
-  comment = 生成摘要，格式如下：
-    **修復人**：{fixer}
-    **修復時間**：{fixTime}
-    ---
-    - 完成的主要功能/修復點（來自 docs/prd.md 或 docs/test-report.md）
-    - 主要改動文件（如有 docs/code-review.md 則引用）
-    - 測試結果（如有 docs/test-report.md）
-
-  mcp__atlassian__jira_add_comment(issueKey, comment)
-
-  // 2. 推進狀態：轉到下一個可用狀態
-  // 先獲取可用 transitions，選擇最接近「完成/提測」的狀態
-  mcp__atlassian__jira_transition_issue(issueKey, targetStatus)
+    Skill: jira-mcp-setup (
+      action: "write_back",
+      context: {
+        issueKey: jiraContext.issueKey,
+        issueUrl: jiraContext.issueUrl,
+        mode: jiraContext.mode || "autopilot",
+        changes: changes,
+        testResult: testResult
+      }
+    )
+  }
 }
 
 🎉 流程完成！
