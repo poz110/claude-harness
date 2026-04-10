@@ -11,6 +11,16 @@ description: "统一的 Jira 问题处理中心。提供：ensureConnected() 确
 
 **双通道保障：MCP 优先，curl 兜底。** 当 MCP server 未启动（session 加载失败、subagent 无 MCP 继承等），自动从 `~/.claude/mcp.json` 读取凭证，切换到 curl REST API 模式，确保配置了就能用。
 
+### ⛔ Iron Law：三层检测不可跳过
+
+**禁止在第 1 层 MCP 失败后直接降级为"未配置"。** 必须严格按顺序执行全部三层：
+
+1. 尝试 MCP 工具 → 失败 → **必须继续第 2 层**
+2. Read `~/.claude/mcp.json` → 有 atlassian 配置 → curl 测试 → 成功则用 curl 模式
+3. 第 2 层也失败 → 才可降级
+
+**违反此规则（跳过第 2 层直接写 mcpConfigured: false）是 BUG。**
+
 ---
 
 ## 入口参数
@@ -28,55 +38,56 @@ description: "统一的 Jira 问题处理中心。提供：ensureConnected() 确
 
 ## 函数 1：ensureConnected()
 
-确保 Jira 可用。三层检测：MCP → curl（从 mcp.json 读凭证）→ 引导配置。
+确保 Jira 可用。**严格按三层顺序执行，禁止跳过任何一层。**
 
+**执行步骤（必须完整执行，不可省略）：**
+
+**Step 1 — 尝试 MCP 工具：**
 ```
-// === 第 1 层：尝试 MCP 工具 ===
 try {
   mcp__atlassian__jira_get_issue(issueKey: "__TEST__")
-  // MCP 可用（即使返回 404 也说明连接正常）
   return { ok: true, method: "mcp" }
 } catch (e) {
-  // MCP 工具不存在或 server 未启动，继续第 2 层
+  // MCP 不可用 → 不要降级，不要写 mcpConfigured:false，继续 Step 2
 }
+```
 
-// === 第 2 层：从 ~/.claude/mcp.json 读取凭证，用 curl 测试 ===
-try {
-  configRaw = Read("~/.claude/mcp.json")
-  config = JSON.parse(configRaw)
-  atlassian = config.mcpServers.atlassian
+**Step 2 — 读 ~/.claude/mcp.json 并用 curl 测试（⛔ 不可跳过）：**
+```
+// ⛔ 即使 Step 1 失败，也必须执行此步骤
+configRaw = Read("~/.claude/mcp.json")   // 读取用户全局 MCP 配置文件
+config = JSON.parse(configRaw)
+atlassian = config.mcpServers.atlassian
 
-  if (atlassian && atlassian.env) {
-    jiraUrl   = atlassian.env.JIRA_URL        // e.g. "https://xxx.atlassian.net"
-    username  = atlassian.env.JIRA_USERNAME    // e.g. "user@company.com"
-    token     = atlassian.env.JIRA_API_TOKEN
+if (atlassian && atlassian.env) {
+  jiraUrl   = atlassian.env.JIRA_URL        // e.g. "https://xxx.atlassian.net"
+  username  = atlassian.env.JIRA_USERNAME    // e.g. "user@company.com"
+  token     = atlassian.env.JIRA_API_TOKEN
 
-    if (jiraUrl && username && token) {
-      // 用 curl 测试连通性（/rest/api/3/myself 最轻量）
-      testResult = Bash: curl -sf -u "${username}:${token}" "${jiraUrl}/rest/api/3/myself" -o /dev/null -w "%{http_code}"
+  if (jiraUrl && username && token) {
+    // 用 curl 测试连通性
+    testResult = Bash: curl -sf -u "${username}:${token}" \
+      "${jiraUrl}/rest/api/3/myself" -o /dev/null -w "%{http_code}"
 
-      if (testResult == "200") {
-        return {
-          ok: true,
-          method: "curl",
-          config: { jiraUrl, username, token,
-                    confluenceUrl: atlassian.env.CONFLUENCE_URL || "",
-                    confluenceUsername: atlassian.env.CONFLUENCE_USERNAME || username,
-                    confluenceToken: atlassian.env.CONFLUENCE_API_TOKEN || token }
-        }
+    if (testResult == "200") {
+      // ✅ curl 可用！使用 curl 模式继续
+      return {
+        ok: true,
+        method: "curl",
+        config: { jiraUrl, username, token,
+                  confluenceUrl: atlassian.env.CONFLUENCE_URL || "",
+                  confluenceUsername: atlassian.env.CONFLUENCE_USERNAME || username,
+                  confluenceToken: atlassian.env.CONFLUENCE_API_TOKEN || token }
       }
-      // curl 测试失败（token 过期、网络不通等）
-      // 告知用户具体 HTTP 状态码，继续第 3 层
     }
+    // curl 返回非 200 → 告知用户 HTTP 状态码（可能 token 过期）
   }
-} catch (e) {
-  // mcp.json 不存在或解析失败，继续第 3 层
 }
+```
 
-// === 第 3 层：引导用户配置 ===
-// 询问用户是否要配置 Jira MCP
-// 若用户同意，引导配置步骤（写 ~/.claude/mcp.json）
-// 验证是否成功
+**Step 3 — 仅当 Step 1 和 Step 2 都失败时，才引导配置：**
+```
+// 只有走到这里才代表真正未配置
 return { ok: false, configured: false }
 ```
 
