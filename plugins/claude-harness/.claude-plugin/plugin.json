@@ -12,8 +12,5 @@
     "state-machine",
     "claude",
     "development"
-  ],
-  "bin": {
-    "harness": "scripts/workflow.js"
-  }
+  ]
 }

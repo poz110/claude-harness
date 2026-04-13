@@ -5,7 +5,7 @@ if (!args[0]) { console.error('Usage: node scripts/bump-version.js <version>'); 
 const v = args[0]
 if (!/^\d+\.\d+\.\d+$/.test(v)) { console.error('Must be x.y.z'); process.exit(1) }
 const ROOT = path.join(__dirname, '..')
-const files = ['package.json', 'plugins/claude-harness/plugin.json']
+const files = ['package.json', 'plugins/claude-harness/plugin.json', 'plugins/claude-harness/.claude-plugin/plugin.json']
 const marketplace = '.claude-plugin/marketplace.json'
 let ok = [], skip = []
 
