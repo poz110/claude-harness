@@ -20,6 +20,7 @@ const path   = require('path')
 const crypto = require('crypto')
 
 const { SCHEMA_VERSION, CONTEXT_BUDGET, TRACKED_ARTIFACT_FILES } = require('./config.js')
+const { createError } = require('./errors.js')
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 const ROOT              = process.env.HARNESS_ROOT || path.join(__dirname, '../..')
@@ -82,7 +83,7 @@ function atomicUpdateState(updateFn) {
   acquireLock()
   try {
     if (!fs.existsSync(STATE_FILE)) return
-    const state = migrateState(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')))
+    const state = migrateState(readStateFile(STATE_FILE))
     const updated = updateFn(state)
     if (updated !== null && updated !== undefined) {
       updated.schemaVersion = SCHEMA_VERSION
@@ -104,7 +105,11 @@ function migrateState(state) {
 
   const [cMaj, cMin] = SCHEMA_VERSION.split('.').map(n => parseInt(n, 10) || 0)
   const [sMaj, sMin] = ver.split('.').map(n => parseInt(n, 10) || 0)
-  if (sMaj > cMaj || (sMaj === cMaj && sMin >= cMin)) return state
+  // 版本纪元说明：schema 版本号历史上经历过 v10 → v15.1，随后重置为 1.x。
+  // 因此 major >= 10 的 version 是「旧纪元」版本，必须迁移；
+  // 仅当同纪元且 state 版本 >= 当前版本时才跳过迁移。
+  const isLegacyEra = sMaj >= 10 && cMaj < 10
+  if (!isLegacyEra && (sMaj > cMaj || (sMaj === cMaj && sMin >= cMin))) return state
 
   console.log(`  ℹ️  Migrating state from schema ${ver} → ${SCHEMA_VERSION}`)
   // v10 fields
@@ -138,6 +143,28 @@ function migrateState(state) {
 
 // ─── State IO ─────────────────────────────────────────────────────────────────
 
+/**
+ * 读取并解析 state 文件。JSON 损坏时：
+ *   1. 将损坏文件隔离为 <file>.corrupt-<timestamp>（保留现场，便于人工恢复）
+ *   2. 抛出 E302 WorkflowError，附带明确的恢复指引
+ * 绝不静默丢弃 —— 静默重置会让用户丢失全部工作流进度。
+ */
+function readStateFile(file) {
+  const raw = fs.readFileSync(file, 'utf8')
+  try {
+    return JSON.parse(raw)
+  } catch (err) {
+    const backup = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`
+    try { fs.renameSync(file, backup) } catch {}
+    throw createError('E302', {
+      file,
+      parseError: err.message,
+      backup,
+      recovery: `损坏文件已备份到 ${backup}。修复后可将其改回 ${path.basename(file)}，或运行 reset 重新开始。`,
+    })
+  }
+}
+
 function loadState() {
   if (!fs.existsSync(STATE_FILE)) {
     return {
@@ -154,7 +181,7 @@ function loadState() {
       taskStartedAt: null,   // [v1.1] 当前任务开始时间
     }
   }
-  return migrateState(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')))
+  return migrateState(readStateFile(STATE_FILE))
 }
 
 function saveState(state) {
@@ -559,7 +586,7 @@ module.exports = {
   ROOT, STATE_FILE, STATE_DIR, AGENT_LOG, ERROR_LOG, LOCK_FILE,
   TRACE_LOG, AGENT_RESULT_FILE,                                          // [v1.0.3]
   acquireLock, releaseLock, isProcessAlive, tryReadLockPid,
-  migrateState, loadState, saveState, atomicUpdateState,
+  migrateState, loadState, saveState, atomicUpdateState, readStateFile,
   appendAgentLog, appendErrorLog,
   checkContextBudget, autoTrackContext, trackContext, resetContextBudget, estimateTokens,
   ESTIMATED_TOTAL, BASH_ESTIMATE, WRITE_ESTIMATE, READ_ESTIMATE,

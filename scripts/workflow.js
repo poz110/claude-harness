@@ -1015,14 +1015,17 @@ ${requirement}
       case 'context-status': {
         const budget = state.contextBudget
         if (!budget) { console.log('ℹ️  Context tracking not active (no agent running or already reset)'); break }
-        const estimated = budget.bashCount * 1000 + budget.writeCount * 500
+        // 与 state.js estimateTokens 保持一致：优先 actualTokens（真实字节/4），否则按操作次数估算
+        const { estimateTokens } = require('./lib/state.js')
+        const estimated = estimateTokens(budget)
         const ratio = estimated / 180000
         const CONTEXT_BUDGET = require('./lib/config.js').CONTEXT_BUDGET
         const icon  = ratio >= CONTEXT_BUDGET.REREAD_THRESHOLD ? '🔴' : ratio >= CONTEXT_BUDGET.WARN_THRESHOLD ? '🟡' : '🟢'
         console.log(`\n${icon} Context Status: ${budget.agentName}`)
         console.log(`  Bash ops  : ${budget.bashCount}`)
         console.log(`  Write ops : ${budget.writeCount}`)
-        console.log(`  Est. tokens: ~${estimated}`)
+        console.log(`  Read ops  : ${budget.readCount || 0}`)
+        console.log(`  Est. tokens: ~${estimated}${budget.actualTokens > 0 ? ' (actual bytes)' : ''}`)
         console.log(`  Usage ratio: ~${Math.round(ratio * 100)}%`)
         console.log(`  Warn threshold   : ${Math.round(CONTEXT_BUDGET.WARN_THRESHOLD * 100)}%`)
         console.log(`  Reread threshold : ${Math.round(CONTEXT_BUDGET.REREAD_THRESHOLD * 100)}%`)
@@ -1032,6 +1035,14 @@ ${requirement}
           docs.forEach(d => console.log(`    - ${d}`))
         }
         console.log()
+        break
+      }
+
+      case 'update-progress': {
+        // [deprecated v14.3] 旧并行 FE/BE 模式标记，fullstack 单 agent 模式无需调用。
+        // 保留为 no-op stub 兼容旧文档/脚本引用，避免落入 unknown command 报错。
+        console.log(`\n⚠️  update-progress 已废弃（v14.3+）：DESIGN_REVIEW 现由 fullstack-engineer 单 agent 完成，无需进度标记。`)
+        console.log(`   此命令为兼容 stub，不执行任何操作。\n`)
         break
       }
 
@@ -1053,22 +1064,23 @@ ${requirement}
       }
 
       case 'fallback-notify': {
-        // 调用 lib/install.js 中的 fallbackNotify（如果存在）
-        const install = require('./lib/install.js')
-        if (install.fallbackNotify) {
-          const [from, to, ...msgParts] = args
-          const message = msgParts.join(' ')
-          if (!from || !to || !message) {
-            console.error('Usage: fallback-notify <from> <to> "<message>"')
-            console.error('Example: fallback-notify be fe "api-spec 已更新至 v1.1。变更：新增 GET /users/me 端点。"')
-            process.exit(1)
-          }
-          install.fallbackNotify(from, to, message)
-        } else {
-          console.error('fallback-notify 已移至 lib/install.js，请使用命令：node scripts/lib/hooks.js hook-post-write')
-          console.error('Agent Teams 启用时此命令会报错')
+        // 文件轮询降级通道（Agent Teams 未启用时的路径 B）：
+        // 将消息追加到 .claude/review-notes.md，供目标 agent 在下一个会话读取。
+        const [from, to, ...msgParts] = args
+        const message = msgParts.join(' ')
+        if (!from || !to || !message) {
+          console.error('Usage: fallback-notify <from> <to> "<message>"')
+          console.error('Example: fallback-notify be fe "api-spec 已更新至 v1.1。变更：新增 GET /users/me 端点。"')
           process.exit(1)
         }
+        const notesFile = path.join(ROOT, '.claude', 'review-notes.md')
+        fs.mkdirSync(path.dirname(notesFile), { recursive: true })
+        if (!fs.existsSync(notesFile)) {
+          fs.writeFileSync(notesFile, '# Review Notes\n\nAgent 间的文件通知通道（fallback 模式）。\n', 'utf8')
+        }
+        const entry = `\n## ${new Date().toISOString()} | ${from} → ${to}\n\n${message}\n`
+        fs.appendFileSync(notesFile, entry, 'utf8')
+        console.log(`✅ 通知已写入 .claude/review-notes.md（${from} → ${to}）`)
         break
       }
 
